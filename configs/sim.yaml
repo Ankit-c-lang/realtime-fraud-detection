@@ -213,7 +213,12 @@ patterns:
 
   ring:
     n_rings: 45
-    target_transactions: 3000
+    # Corrected from PLAN §4.5's stated total. That section gives BOTH a structure
+    # (~45 rings x 6-15 accounts x 6-12 transactions each) and a total of ~3,000,
+    # and they disagree: the midpoints multiply out to ~4250. The structure is
+    # load-bearing (n_rings >= 32 is required by the quotas below), so the stated
+    # total is the figure that was wrong. No structural range was touched.
+    target_transactions: 4250
     accounts_min: 6
     accounts_max: 15
     account_age_days_min: 3    # created 3-30 days before the ring starts

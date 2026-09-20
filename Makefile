@@ -46,7 +46,8 @@ redis-up:  ## Start the Redis container
 # --- offline pipeline -------------------------------------------------------
 
 data:  ## Generate the simulated dataset and its report (PLAN §4)
-	@echo "not implemented yet: $@ — Phase 1, PLAN §4"; exit 1
+	$(RUN) python -m fraud.sim.generate
+	$(RUN) python -m fraud.sim.checks
 
 features:  ## Offline replay to hot_features.parquet plus the checkpoint (PLAN §5)
 	@echo "not implemented yet: $@ — Phase 2, PLAN §5"; exit 1

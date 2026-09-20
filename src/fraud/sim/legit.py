@@ -94,7 +94,7 @@ def generate_legit(
     )
 
     extra = [
-        _inject_shopping_sprees(rng, config, categories, merchants, frame),
+        _inject_shopping_sprees(rng, config, categories, accounts, merchants, frame),
         _inject_micro_bursts(
             rng, config, categories, accounts, merchants, population, frame, start, days
         ),
@@ -531,16 +531,31 @@ def _apply_travel(
 
 
 def _gap_violations(times: np.ndarray, away: np.ndarray, gap: np.timedelta64) -> np.ndarray:
-    """Events too close to a boundary for the journey to have been possible."""
+    """Events too close to a boundary for the journey to have been possible.
+
+    Walks in time order against the last event that was KEPT. Checking only the single
+    crossing event was not enough: once it was dropped, the next event on the far side
+    inherited the too-short gap and survived, which is how a 54-minute Mumbai-to-Delhi
+    hop got through.
+    """
     violated = np.zeros(len(times), dtype=bool)
     order = np.argsort(times, kind="stable")
-    ordered_away = away[order]
-    boundaries = np.flatnonzero(np.diff(ordered_away.astype(np.int8)) != 0)
 
-    for boundary in boundaries:
-        before, after = order[boundary], order[boundary + 1]
-        if times[after] - times[before] < gap:
-            violated[after] = True
+    last_time: np.datetime64 | None = None
+    last_side: bool | None = None
+    for index in order:
+        side = bool(away[index])
+        if last_side is None:
+            last_side, last_time = side, times[index]
+            continue
+
+        if side != last_side:
+            if times[index] - last_time < gap:
+                violated[index] = True
+                continue
+            last_side = side
+        last_time = times[index]
+
     return violated
 
 
@@ -582,6 +597,7 @@ def _inject_shopping_sprees(
     rng: np.random.Generator,
     config: dict[str, Any],
     categories: list[dict[str, Any]],
+    accounts: pd.DataFrame,
     merchants: pd.DataFrame,
     frame: pd.DataFrame,
 ) -> pd.DataFrame:
@@ -601,12 +617,17 @@ def _inject_shopping_sprees(
         return frame.iloc[:0]
 
     by_name = {c["name"]: c for c in categories}
+    home_city = accounts.set_index("account_id")["home_city"]
     rows: list[pd.DataFrame] = []
     for _, seed in seeds.iterrows():
+        # The account's OWN city, not the seed event's. A seed that went out over a
+        # carrier-NAT IP in another city would otherwise pull the spree's card-present
+        # rows to that city and fake a location jump minutes later.
+        where = str(home_city[seed["account_id"]])
         count = int(rng.integers(int(spec["extra_txns_min"]), int(spec["extra_txns_max"]) + 1))
         shops = int(rng.integers(int(spec["merchants_min"]), int(spec["merchants_max"]) + 1))
         local = np.flatnonzero(
-            (merchants["city"].to_numpy() == seed["city"]) | merchants["is_online"].to_numpy()
+            (merchants["city"].to_numpy() == where) | merchants["is_online"].to_numpy()
         )
         if not len(local):
             continue
@@ -614,7 +635,7 @@ def _inject_shopping_sprees(
         picked = rng.choice(local, size=min(shops, len(local)), replace=False)
         picked = picked[rng.integers(0, len(picked), count)]
         offsets = rng.integers(1, int(spec["window_minutes"]) * 60, count)
-        rows.append(_rows_from_template(rng, seed, merchants, picked, offsets, by_name))
+        rows.append(_rows_from_template(rng, seed, merchants, picked, offsets, by_name, where))
 
     return pd.concat(rows, ignore_index=True) if rows else frame.iloc[:0]
 
@@ -636,6 +657,7 @@ def _inject_micro_bursts(
         return frame.iloc[:0]
 
     by_name = {c["name"]: c for c in categories}
+    home_city = accounts.set_index("account_id")["home_city"]
     chosen = rng.permutation(len(accounts))[: round(len(accounts) * float(spec["account_share"]))]
     seeds_by_account = frame.groupby("account_id").indices
     account_ids = accounts["account_id"].to_numpy()
@@ -654,7 +676,9 @@ def _inject_micro_bursts(
                 count,
                 int(np.flatnonzero(merchants["merchant_id"].to_numpy() == seed["merchant_id"])[0]),
             )
-            burst = _rows_from_template(rng, seed, merchants, merchant, offsets, by_name)
+            burst = _rows_from_template(
+                rng, seed, merchants, merchant, offsets, by_name, str(home_city[seed["account_id"]])
+            )
             # The defining feature: every amount is tiny, from the account's own device.
             burst["amount"] = np.round(
                 rng.uniform(_MIN_AMOUNT, float(spec["amount_max"]), count), 2
@@ -671,6 +695,7 @@ def _rows_from_template(
     merchant_rows: np.ndarray,
     offsets: np.ndarray,
     by_name: dict[str, dict[str, Any]],
+    home_city: str,
 ) -> pd.DataFrame:
     """Extra events that reuse a real event's account, device and IP.
 
@@ -687,7 +712,7 @@ def _rows_from_template(
     online_share = np.array([float(by_name[c]["online_share"]) for c in category])
     online = rng.random(len(category)) < online_share
     merchant_rows, online = _ground_card_present(
-        rng, merchants, merchant_rows, online, np.full(len(online), seed["city"])
+        rng, merchants, merchant_rows, online, np.full(len(online), home_city)
     )
     category = merchants["category"].to_numpy()[merchant_rows]
 

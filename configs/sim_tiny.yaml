@@ -183,6 +183,10 @@ patterns:
 
   ring:
     n_rings: 8
+    # 8 rings x 5 accounts x 5 transactions (midpoints of this file's own ranges)
+    # = 200, so the tiny target is already self-consistent and is left alone. The
+    # ~3,000 vs ~4,250 inconsistency corrected in sim.yaml is a property of the FULL
+    # config's ranges (6-15 accounts, 6-12 transactions), which differ here.
     target_transactions: 200
     accounts_min: 4
     accounts_max: 6

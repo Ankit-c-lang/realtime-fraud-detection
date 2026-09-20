@@ -169,6 +169,7 @@ class _Context:
         self.train = (pd.Timestamp(splits["train"]["start"]), pd.Timestamp(splits["train"]["end"]))
         self.test = (pd.Timestamp(splits["test"]["start"]), pd.Timestamp(splits["test"]["end"]))
 
+        self.created_at = population.accounts["created_at"]
         counts = legit.groupby("account_id").size()
         self.activity = counts
         self.mean_amount = legit.groupby("account_id")["amount"].mean()
@@ -459,17 +460,20 @@ def _inject_card_testing(
         city = pool.iloc[int(rng.integers(0, len(pool)))]
         ip = registry.ip(kind, city)
 
-        victims = rng.choice(
-            accounts,
-            size=int(rng.integers(int(spec["victims_min"]), int(spec["victims_max"]) + 1)),
-            replace=False,
-        )
         window = float(
             rng.uniform(float(spec["window_minutes_min"]), float(spec["window_minutes_max"]))
         )
         origin = context.start + pd.Timedelta(
             seconds=int(rng.integers(0, int((context.end - context.start).total_seconds())))
         )
+
+        # Only cards that exist yet. Drawing from every account let an attack probe an
+        # account created weeks later, which put events before their own account.
+        existing = accounts[context.created_at.to_numpy() <= origin.to_datetime64()]
+        wanted = int(rng.integers(int(spec["victims_min"]), int(spec["victims_max"]) + 1))
+        if len(existing) < int(spec["victims_min"]):
+            continue
+        victims = rng.choice(existing, size=min(wanted, len(existing)), replace=False)
 
         shops = int(rng.integers(int(spec["merchants_min"]), int(spec["merchants_max"]) + 1))
         picked = rng.choice(low_friction, size=min(shops, len(low_friction)), replace=False)

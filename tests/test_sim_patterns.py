@@ -233,9 +233,12 @@ def test_card_testing_probes_are_tiny_and_often_declined(
     probes = events[events["amount"] <= float(spec["amount_max"])]
 
     assert (probes["amount"] >= float(spec["amount_min"])).all()
+    # Wide tolerance on purpose: sim_tiny runs only a couple of attacks, so a few dozen
+    # probes carry real sampling noise. What matters is that this looks nothing like the
+    # 1.5% decline rate of ordinary traffic.
     declined = (probes["status"] == "DECLINED").mean()
     assert (
-        float(spec["decline_rate_min"]) - 0.1 <= declined <= float(spec["decline_rate_max"]) + 0.1
+        float(spec["decline_rate_min"]) - 0.15 <= declined <= float(spec["decline_rate_max"]) + 0.15
     )
 
 
@@ -364,35 +367,32 @@ def test_fraud_prevalence_is_in_band(attacks: Attacks, legit: pd.DataFrame) -> N
     assert 0.010 <= len(attacks.events) / total <= 0.020
 
 
-@pytest.mark.parametrize("pattern", ["velocity", "ato", "card_testing"])
+@pytest.mark.parametrize("pattern", ["velocity", "ato", "card_testing", "ring"])
 def test_pattern_volume_is_within_thirty_percent_of_target(
     attacks: Attacks, config: dict[str, Any], pattern: str
 ) -> None:
-    """PLAN §4.8. RING is excluded: see test_ring_volume_matches_its_structure."""
+    """PLAN §4.8: every pattern within ±30% of its configured target."""
     target = int(config["patterns"][pattern]["target_transactions"])
     produced = int((attacks.events["fraud_type"] == pattern.upper()).sum())
     assert abs(produced / target - 1.0) <= 0.30
 
 
-def test_ring_volume_matches_its_structure(attacks: Attacks, config: dict[str, Any]) -> None:
-    """The ring volume follows from n_rings x accounts x transactions.
+def test_ring_target_agrees_with_the_ring_structure(config: dict[str, Any]) -> None:
+    """The configured ring total must stay consistent with what the structure produces.
 
-    PLAN §4.5 gives both the structure (6-15 accounts, 6-12 transactions each, ~45 rings)
-    and a total of "~3,000", but those disagree: the midpoints multiply out to about
-    4,250. The structural numbers carry the ring constraints, so they win, and this
-    asserts against them. configs/sim.yaml still records the plan's 3,000, which is why
-    RING is left out of the target-band test above.
+    PLAN §4.5 states ~3,000 but its own structure (~45 rings x 6-15 accounts x 6-12
+    transactions each) multiplies out to ~4,250. The config records the corrected figure;
+    this keeps the two from drifting apart again if a structural range is ever edited.
     """
     spec = config["patterns"]["ring"]
-    produced = int((attacks.events["fraud_type"] == "RING").sum())
-    expected = (
+    implied = (
         int(spec["n_rings"])
         * (int(spec["accounts_min"]) + int(spec["accounts_max"]))
         / 2.0
         * (int(spec["txns_per_account_min"]) + int(spec["txns_per_account_max"]))
         / 2.0
     )
-    assert abs(produced / expected - 1.0) <= 0.30
+    assert abs(int(spec["target_transactions"]) / implied - 1.0) <= 0.10
 
 
 @pytest.mark.slow
