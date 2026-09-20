@@ -146,7 +146,7 @@ def _draw_daily_counts(
     return np.repeat(day_index, repeats), np.repeat(account_row, repeats)
 
 
-def _time_of_day_profile(spec: dict[str, Any], shift_hours: float) -> np.ndarray:
+def time_of_day_profile(spec: dict[str, Any], shift_hours: float) -> np.ndarray:
     """A 15-minute-resolution density over the day (PLAN §4.4 step 2)."""
     centres = (np.arange(_BINS_PER_DAY) + 0.5) * (24.0 / _BINS_PER_DAY)
     density = np.full(_BINS_PER_DAY, float(spec["uniform_weight"]) / 24.0)
@@ -176,8 +176,8 @@ def _draw_times(
     """Seconds from the start of the window for every event."""
     spec = config["legit"]["diurnal"]
     profiles = {
-        False: _time_of_day_profile(spec, 0.0),
-        True: _time_of_day_profile(spec, float(config["legit"]["night_owl_shift_hours"])),
+        False: time_of_day_profile(spec, 0.0),
+        True: time_of_day_profile(spec, float(config["legit"]["night_owl_shift_hours"])),
     }
 
     night_owl = accounts["is_night_owl"].to_numpy()[account_row]

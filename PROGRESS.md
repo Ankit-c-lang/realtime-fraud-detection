@@ -5,33 +5,36 @@ that task. Source of truth for *what* to build is `PLAN.md`; this file only trac
 
 - **Plan version:** v1 (2026-09-16) · **Started:** 2026-09-20
 - **Current phase:** Phase 1 — Simulator (PLAN §17, Phase 1) · Phase 0 complete, tagged `phase-0`
-- **Phase 1 progress:** 3 / 8 tasks
-- **Overall:** 11 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Phase 1 progress:** 4 / 8 tasks
+- **Overall:** 12 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Phase 1 · Task 4 — `src/fraud/sim/patterns.py` (PLAN §4.5, prompt P1.3).**
-The four fraud injectors, each returning events plus label rows: VELOCITY, ATO,
-CARD_TESTING and RING. Ring mule accounts are created here (their ages are relative to
-each ring's start), along with the ring constraints: 30% device reuse from a ring active
-in the last 30 days, >=12 rings starting inside the test window with >=4 of those reusing
-a device, and >=20 rings starting and finishing inside training.
+**Phase 1 · Task 5 — `src/fraud/sim/generate.py` (PLAN §4.2, prompt P1.4).**
+Assemble population + legit + patterns, stable-sort by `event_time`, assign
+`txn_id = f"T{i:07d}"`, and write `data/raw/{events,accounts,merchants,labels}.parquet`
+with zstd plus `manifest.json` (seed, generator version, sha256 of `sim.yaml`, row counts
+per table and per pattern).
 
-Labels carry `fraud_type`, `attack_id`, `ring_id` and `label_available_at`
-(= `event_time` + 14 days). Victims' other transactions stay legitimate.
+`events.parquet` carries exactly the §4.2 columns and **no label columns**.
+`labels.parquet` gets one row per event: `is_fraud`, `fraud_type` (`NONE` for legit),
+`attack_id`, `ring_id`, `label_available_at = event_time + 14 days`.
 
-Blocked on nothing.
+**Also re-measure the tiny end-to-end runtime here** and decide whether the
+`sim_tiny.yaml` 90-day calendar survives §13's "finishes in seconds" (see deviations).
+
+**Blocked on a decision:** the RING volume target (see the top of the deviations table).
 
 ---
 
 ## Next up (in order)
 
-1. **P1.3** — `src/fraud/sim/patterns.py` + `tests/test_sim_patterns.py` (see *Currently working on*).
-2. **P1.4** — `src/fraud/sim/generate.py`: assemble, stable-sort by `event_time`, assign `txn_id`, write the four Parquet files and `manifest.json`. **Re-measure the tiny end-to-end runtime here** and decide whether the `sim_tiny.yaml` 90-day calendar survives (see deviations).
-3. **P1.5** — `src/fraud/sim/checks.py` + `reports/sim_report.md` (§4.8).
-4. Freeze `configs/sim.yaml`, record its sha256 in the report, tag `sim-v1`.
+1. **P1.4** — `src/fraud/sim/generate.py` + `tests/test_sim_schema.py` and `tests/test_sim_determinism.py` (see *Currently working on*).
+2. **P1.5** — `src/fraud/sim/checks.py` + `reports/sim_report.md` (§4.8), running every check in that section against the full run.
+3. Resolve the RING volume decision, then freeze `configs/sim.yaml`, record its sha256 in the report, and tag `sim-v1`.
+4. Then **Phase 2** — `features/spec.py` and the 30 hot features (§5.2).
 
 ---
 
@@ -72,6 +75,7 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-20 | 1 | `src/fraud/sim/population.py`: accounts, merchants, devices and the four IP pools, from one `SeedSequence` | `tests/test_sim_population.py`, 38 tests; full config builds in 1.8 s |
 | 2026-09-20 | 1 | Cleanup: `merchants.online_merchant_share` (34.3% measured) and `ip_pools.office.usage_share` (0.50) as explicit knobs in both sim configs | `tests/test_configs.py` + population tests, 28 + 40 |
 | 2026-09-20 | 1 | `src/fraud/sim/legit.py`: vectorised legitimate stream and all nine hard negatives | `tests/test_sim_hard_negatives.py`, 23 tests; full config 488,408 events in 35 s, -0.84% of target |
+| 2026-09-20 | 1 | `src/fraud/sim/patterns.py`: all four injectors, ring mule accounts, deliberate ring placement | `tests/test_sim_patterns.py`, 24 tests; full config 8,362 fraud events in 2.4 s, prevalence 1.683%; every §4.5 quota and §4.8 signature check met |
 
 ---
 
@@ -94,7 +98,7 @@ before continuing — do not silently slip.
 - [x] 1. Configs: `sim.yaml`, `sim_tiny.yaml`, `cities.csv` (15 IN + 8 intl), `categories.yaml`, `splits.yaml`
 - [x] 2. `sim/population.py` — accounts, merchants, devices, IP pools
 - [x] 3. `sim/legit.py` — legitimate behaviour + all hard negatives (§4.4)
-- [ ] 4. `sim/patterns.py` — 4 fraud injectors + ring constraints (§4.5)
+- [x] 4. `sim/patterns.py` — 4 fraud injectors + ring constraints (§4.5)
 - [ ] 5. `sim/generate.py` — assemble, stable sort, `txn_id`, Parquet + `manifest.json`
 - [ ] 6. `sim/checks.py` — §4.8 checks → `reports/sim_report.md`
 - [ ] 7. `test_sim_*` tests
@@ -194,7 +198,28 @@ before continuing — do not silently slip.
 
 ## Decisions and deviations from PLAN.md
 
-Record anything that departs from the plan, with the reason. Empty so far.
+Record anything that departs from the plan, with the reason.
+
+### ⚠️ OPEN DECISION — RING volume target (blocks the `sim-v1` freeze)
+
+PLAN §4.5 gives the ring pattern **both** a structure and a total, and they disagree:
+
+- structure: ~45 rings x 6-15 accounts x 6-12 transactions each -> midpoints give **~4,250**
+- stated total: **"~3,000 transactions"**
+
+The run produces **4,282**, which is +42.7% against the config's 3,000 and so outside the
+±30% band §4.8 enforces. Every other pattern is inside the band.
+
+The structural numbers are the load-bearing ones: `n_rings` has to stay at 45 for the
+quotas (>=20 fully in train plus >=12 starting in test needs >=32 rings), and the account
+and transaction ranges are quoted directly in §4.5.
+
+**Recommendation:** change `patterns.ring.target_transactions` from 3000 to 4250 in
+`sim.yaml` (and 200 -> 250 in `sim_tiny.yaml`), leaving the structure alone. That lifts the
+config's overall fraud target to 1.73%, still inside §4.1's band, and the measured
+prevalence of 1.683% is unaffected either way. **Not done — configs are not edited without
+your say-so.** Until then `test_sim_patterns.py` asserts RING against its structure and
+excludes it from the target-band test, with the reason in the docstring.
 
 | Date | Deviation | Reason | Plan §|
 |---|---|---|---|
@@ -218,6 +243,9 @@ Record anything that departs from the plan, with the reason. Empty so far.
 | 2026-09-20 | The activity rescale subtracts fraud **and** the expected shopping-spree and micro-burst volume | Scaling the base draw to the full target overshot by +13.8%, outside the ±5% tolerance, because the hard negatives are injected on top. Now -0.84% | §4.3 |
 | 2026-09-20 | Travel is applied **after** sprees and micro-bursts are injected | Applying it first left a spree seeded at home sitting inside the trip window in the wrong city, producing a 0.01 h city change no journey could explain. Minimum POS city-change gap is now 15.95 h | §4.4 |
 | 2026-09-20 | Injected spree and burst rows inherit their seed's IP, so a few card-present rows carry a shared office IP | Keeping the burst on one connection is the point of the hard negative. Harmless: a POS location comes from the merchant, and the account genuinely belongs to that office cluster | §4.4 |
+| 2026-09-20 | Ring placement is assigned deliberately (20 to train, 12 to test, rest anywhere) rather than drawn at random | The §4.5 quotas fail by chance otherwise, and the ring half of the evaluation would then measure nothing. `checks.py` re-verifies the outcome rather than trusting the assignment | §4.5 |
+| 2026-09-20 | A domestic ATO picks an Indian city **>900 km** from the victim's last purchase | §4.8 requires >900 km/h at the first fraud event and the lag is at most an hour, so a neighbouring city would not register as a jump at all. Now 100% of 120 attacks clear the bar | §4.5, §4.8 |
+| 2026-09-20 | `patterns.py` reads `configs/splits.yaml` directly | The ring quotas are defined against the train and test windows, so the simulator has to know where they are. It reads the single source of truth; `modeling/splits.py` remains the only loader of split *rows* | §4.5, §4.7, invariant 6 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---
