@@ -8,36 +8,28 @@ that task. Source of truth for *what* to build is `PLAN.md`; this file only trac
 - **Phase 1 progress:** 8 / 8 ✅ — **simulator FROZEN, tagged `sim-v1`**
 - **Phase 2 progress:** 7 / 7 ✅ — tagged `phase-2`
 - **Phase 3 progress:** 6 / 6 ✅ (E3 ablation belongs to Phase 4)
-- **Overall:** 28 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Overall:** 30 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Phase 4 · Task 1 — choose `device_cap` and `ip_cap` (PLAN §6.1, prompt P4.1).**
+**Phase 4 · Task 3 — `src/fraud/graph/snapshots.py` (PLAN §6.2, prompt P4.3).**
+Build all 89 daily offline snapshots from 2026-01-02 to 2026-03-31 into
+`data/graph/offline/snapshot_ts=<T>/part.parquet`, plus `calendar.parquet`. Log the
+runtime per snapshot: §6.1 says switch to weekly and document it if a full run passes
+~10 minutes. Measured on one snapshot it is ~1.6 s, so ~2.5 min is expected.
 
-The measurement is done and committed: **`reports/entity_fanout.md`**, 39 daily 30-day
-windows over train, 849,923 device pairs and 699,838 IP pairs, every entity labelled.
+Then `graph/join.py`: the two-step point-in-time join (§6.4). Never an ASOF keyed on the
+account — that is the stale-value trap the plan calls out.
 
-**Waiting on you to set the two caps.** Nothing is chosen yet, deliberately. The tables
-show a clean corridor on each side:
-
-- devices: `shared` maxes at 14 and `ring` at 15; `attacker` (card testing) sits at
-  p90 42, max 60
-- IPs: `office` maxes at 70; `nat` has a *median* of 114
-
-Note the ring/shared overlap on devices is total by design after sim-v2 — rings (max 15)
-and legitimate shared devices (max 14) occupy the same band, which is exactly what makes
-the graph structure, rather than a count, the thing that separates them.
-
-After the caps: `graph/projection.py` (the §6.1 SQL, with `ORDER BY` so Louvain is
-deterministic).
+Blocked on nothing.
 
 ---
 
 ## Next up (in order)
 
-1. **P4.1b** — set the caps, write `configs/graph.yaml`, then `graph/projection.py` (see *Currently working on*).
+1. **P4.3** — `graph/snapshots.py` + `graph/join.py` -> `training_table.parquet` (see *Currently working on*).
 2. **P4.2** — `graph/algorithms.py`: degree, clustering, seeded Louvain, community aggregates, personalised PageRank with the 14-day label delay.
 3. **P4.3** — `graph/snapshots.py` (89 daily snapshots, log the runtime; over ~10 min means switch to weekly) and `graph/join.py` (the two-step point-in-time join).
 4. **P4.4** — **E3** on 36 features with parameter set P unchanged, plus the ablation table.
@@ -102,6 +94,9 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-20 | 3 | Re-ran E1/E2 on valid only. **E1 0.6305 -> 0.4181** (precision 0.928 -> 0.622, FPR 6.75x) — the negatives genuinely overlap now. **E2 0.9995 -> 0.9973**, ring recall still 1.00 | `reports/experiments/` |
 | 2026-09-20 | 4 | `scripts/entity_fanout_stats.py` + `reports/entity_fanout.md`: fan-out over 39 daily 30-day train windows, every entity type labelled | 849,923 device / 699,838 IP (entity, window) pairs |
 | 2026-09-20 | 4 | **Bug fix `sim-v2-fix1`**: `next_device()` now registers what it allocates. Spares were unregistered, so attacker devices reused their ids | 0 rows were affected (proved); E1/E2 identical after regeneration; 2 regression tests |
+| 2026-09-20 | 4 | `configs/graph.yaml`: **`device_cap: 16`, `ip_cap: 18`** chosen against the train-only fan-out distributions | `reports/entity_fanout.md` |
+| 2026-09-20 | 4 | `graph/projection.py` (DuckDB, sorted edges) and `graph/algorithms.py` (degree, clustering, seeded Louvain, community aggregates, personalised PageRank) | `test_graph_projection.py` (13), `test_graph_algorithms.py` (16), `test_graph_leakage.py` (13) |
+| 2026-09-20 | 4 | Real snapshot at 2026-02-20: 2,614 nodes, 6,143 edges, 642 communities, 320 seeds in 1.6 s. **Clustering mean 0.794, non-zero on 82%** | confirms the §1 bipartite correction |
 | 2026-09-20 | 1 | **SIMULATOR FROZEN — tagged `sim-v1`.** `configs/sim.yaml` sha256 `97404e57e5da143b1f1b47c11caac96d315ce5fe85da1f47feba5cda9976863f` matches the report and the run manifest | `git tag sim-v1`; CLAUDE.md invariant 11 |
 
 ---
@@ -152,9 +147,9 @@ before continuing — do not silently slip.
 - **🚩 CHECKPOINT (end of Day 5): E2 on valid exists.** E2 must beat E1 on PR-AUC and recall@budget.
 
 ### Phase 4 — Graph layer (Day 6 pm → Day 7, ~14 h, 6/10)
-- [ ] 1. Measure accounts-per-device / per-IP on train; set `device_cap`, `ip_cap` in `graph.yaml`
-- [ ] 2. `graph/projection.py` (§6.1 SQL, with `ORDER BY`)
-- [ ] 3. `graph/algorithms.py` — degree, clustering, seeded Louvain, community aggregates, personalized PageRank w/ label delay
+- [x] 1. Measure accounts-per-device / per-IP on train; set `device_cap`, `ip_cap` in `graph.yaml`
+- [x] 2. `graph/projection.py` (§6.1 SQL, with `ORDER BY`)
+- [x] 3. `graph/algorithms.py` — degree, clustering, seeded Louvain, community aggregates, personalized PageRank w/ label delay
 - [ ] 4. `graph/snapshots.py` — daily offline snapshots + `calendar.parquet`
 - [ ] 5. `graph/join.py` — two-step point-in-time join → `training_table.parquet`
 - [ ] 6. **E3** (36 features, param set P) + ablation vs E2
@@ -289,6 +284,8 @@ again in either file.
 | 2026-09-20 | **`sim-v2`: the one revision §4.8 allows, now spent.** Four config knobs — `devices.shared_device_share` (5-15 account groups), `travel.new_device_share`, `vpn.new_device_share`, `shopping_spree.tight_share` | E2 hit 0.9995 with literally zero legitimate overlap on three fraud shapes. After: 866 legit rows at `dev_accts_30d>=5` (was 0), 283 at `acct_cnt_5m>=5` (was 1). Legit `dev_accts_30d` now reaches 14 against a ring median of 4. **No sim-v3** | §4.8 |
 | 2026-09-20 | Two hard-negative tests rewritten for the new intent | They asserted the old too-clean behaviour: that every VPN session used an owned device, and that every shared device was a household one. Both are deliberately false under sim-v2. The replacements assert the *new* contract, including a new test that a legitimate device must reach the ring band | §4.4, §4.8 |
 | 2026-09-20 | `sim-v2-fix1`: device-id registration bug fixed and everything regenerated | `next_device()` allocated an id but left registration to the caller, and the spare-handset code forgot, so `patterns.py` numbered attacker devices on top of spare ids. **Correctness only — no knob or realism assumption changed**, `sim.yaml` is byte-identical, so the §4.8 revision is not re-spent. Committed data was unaffected by luck (0 ids carried both legit and fraud events); a different seed would have fused a traveller's phone with an attacker's. Confirmed harmless by regenerating: same 494,189 events, same 1.691% fraud, E1 0.4181 and E2 0.9973 unchanged to 4 dp | §6.1 |
+| 2026-09-20 | Caps set to `device_cap: 16`, `ip_cap: 18` — §6.1's own placeholders, kept after reviewing the measured distributions | §6.1 also suggests the 99.5th percentile, which on this data is **4** for devices. That would erase the rings the graph exists to find, since a ring puts 6-15 accounts on a device. 16 sits above rings (max 15) and sim-v2 shared devices (max 14) and below card-testing devices (p90 42). 18 keeps ring IPs (max 14) and drops carrier NAT (median 114), VPN (max 58) and offices (median 27) — §6.1 names big offices as something the cap *should* drop, since an office IP fuses colleagues into a ring-shaped cluster | §6.1 |
+| 2026-09-20 | `ppr_risk` is ~1e-5 rather than exactly 0 for accounts the seeds cannot reach | Power iteration starts from a uniform vector and stops at the default tolerance. Five orders of magnitude below seeded values, so it cannot move a tree split; forcing it to zero would cost iterations for nothing. Documented in `algorithms.py` and asserted as a ratio, not as zero | §6.3 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---

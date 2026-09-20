@@ -1,0 +1,56 @@
+# Account-to-account graph configuration (PLAN §6).
+#
+# Not covered by the sim-v2 freeze: this governs how the graph is derived from the frozen
+# data, not the data itself.
+
+# Daily snapshots at 00:00 IST. Events before the first snapshot get the defaults below.
+cadence_days: 1
+calendar_start: 2026-01-02
+calendar_end: 2026-03-31
+
+# Edges come from events in [T - lookback_days, T).
+lookback_days: 30
+
+# --- fan-out caps (PLAN §6.1) ----------------------------------------------
+# An entity contributes edges only when it links between min_accounts and its cap.
+#
+# CHOSEN 2026-09-20 against the sim-v2 train-period distributions in
+# reports/entity_fanout.md: 39 daily 30-day windows, 849,923 device and 699,838 IP
+# (entity, window) pairs, train only. No test data was involved.
+#
+# §6.1 suggests the 99.5th percentile, which on this data is 4 for devices and 24 for IPs.
+# That heuristic was reviewed and not used directly. The device figure is far too low: a
+# ring puts 6-15 accounts on a device, so a cap of 4 would erase the very structure the
+# graph exists to find. These caps sit just above the legitimate and ring clusters and
+# below the hubs.
+#
+# device_cap 16 keeps rings (max 15) and the sim-v2 widely shared devices (max 14), and
+#   drops card-testing attacker devices (p90 42, max 60).
+# ip_cap 18 keeps ring IPs (max 14) and home IPs (max 4), and drops carrier NAT
+#   (median 114), VPN exit nodes (max 58), attacker IPs (max 60) and offices (median 27,
+#   max 70). Dropping big offices is intended, not collateral: §6.1 lists them alongside
+#   NAT, because an office IP fuses colleagues into a cluster that looks like a ring.
+device_cap: 16
+ip_cap: 18
+min_accounts: 2
+
+# --- algorithms (PLAN §6.3) -------------------------------------------------
+louvain_seed: 42
+pagerank_alpha: 0.85
+
+# Seeds for personalised PageRank at snapshot T are accounts with a fraud label whose
+# label_available_at < T. Chargebacks arrive late, so a fresher label is not knowable
+# yet; this rule is identical in every split, exactly as production would be (§6.2).
+label_delay_days: 14
+
+# An account is "young" at T when created_at > T - young_days.
+young_days: 30
+
+# Values for accounts that are not in the graph at all (PLAN §6.3).
+defaults:
+  graph_degree: 0.0
+  graph_clustering: 0.0
+  community_size: 1
+  community_shared_devices: 0
+  community_young_share: 0.0
+  ppr_risk: 0.0
