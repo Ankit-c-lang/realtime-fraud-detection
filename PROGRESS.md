@@ -4,29 +4,29 @@ Living status file. **Update it at the end of every completed task**, together w
 that task. Source of truth for *what* to build is `PLAN.md`; this file only tracks *where we are*.
 
 - **Plan version:** v1 (2026-09-16) · **Started:** 2026-09-20
-- **Current phase:** Phase 0 — Environment and skeleton (PLAN §17, Phase 0)
-- **Overall:** 7 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 6.5 / 7
+- **Current phase:** Phase 1 — Simulator (PLAN §17, Phase 1) · Phase 0 complete, tagged `phase-0`
+- **Overall:** 8 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Phase 0 · Task 2b — push to GitHub.**
-`ci.yml` is written and its steps pass locally, but the workflow has never run: the GitHub
-repository does not exist yet. The remote is already configured as
-`git@github.com:Ankit-c-lang/realtime-fraud-detection.git` (SSH authenticates as `Ankit-c-lang`).
+**Phase 1 · Task 1 — simulator configs (PLAN §4.2-§4.3, prompt P1.1).**
+Write `configs/sim.yaml` and `configs/sim_tiny.yaml` (population, patterns, hard negatives, seed),
+`configs/cities.csv` (15 Indian + 8 international cities with approximate lat/lon and weights),
+`configs/categories.yaml` (10 categories in a fixed order, lognormal median/sigma, POS/ONLINE mix)
+and `configs/splits.yaml` (§4.7 — the only place split dates ever live).
 
-**Blocked on the user:** `gh` is not installed on this VM, so the empty private repo
-`realtime-fraud-detection` must be created first (github.com/new, no README/licence/gitignore).
-Then `git push -u origin main` and confirm the `ci` workflow goes green.
+Blocked on nothing. Read PLAN §4.1-§4.3 and §4.7 first.
 
 ---
 
 ## Next up (in order)
 
-1. **P0.2b** — create the private GitHub repo, `git push -u origin main`, confirm CI is green (see *Currently working on*).
-2. Close Phase 0, tag `phase-0`.
-3. Start **Phase 1 (Simulator)** — prompt P1.1: `configs/{sim,sim_tiny,categories,splits}.yaml`, `configs/cities.csv`, then `src/fraud/sim/population.py` (PLAN §4.2-§4.3).
+1. **P1.1a** — the four configs plus `cities.csv` (see *Currently working on*).
+2. **P1.1b** — `src/fraud/sim/population.py`: accounts (incl. mid-simulation ones), merchants (20 low-friction, 60 colluding), devices (families, phone upgrades), IP pools (home, carrier NAT, office/college, VPN). NumPy Generators spawned from one SeedSequence. No event generation yet.
+3. **P1.1c** — `tests/test_sim_population.py`.
+4. Then P1.2: `sim/legit.py` and the hard negatives (§4.4).
 
 ---
 
@@ -59,7 +59,10 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-20 | 0 | `uv lock` + `uv sync --all-groups` — 111 packages resolved, Python 3.12.3 | `uv.lock` committed |
 | 2026-09-20 | 0 | `git init` + first two commits (plan/context, then skeleton) | `git log`: 2369922, af2cc96 |
 | 2026-09-20 | 0 | `docker-compose.yml` with the `redis` service only, pinned to `redis:8.10.1-alpine`; container healthy | `docker compose exec redis redis-cli ping` → `PONG` |
-| 2026-09-20 | 0 | `.github/workflows/ci.yml` (`lint-unit` job) written; `origin` remote configured; GitHub SSH verified | CI steps pass locally; **not yet run on GitHub** |
+| 2026-09-20 | 0 | `.github/workflows/ci.yml` (`lint-unit` job) written; `origin` remote configured; GitHub SSH verified | CI steps pass locally |
+| 2026-09-20 | 0 | Private repo created and `main` pushed | github.com/Ankit-c-lang/realtime-fraud-detection (PRIVATE) |
+| 2026-09-20 | 0 | **CI green on GitHub** after fixing an unresolvable `setup-uv@v10` pin | run 35504020945, `lint-unit` ✓ in 20s |
+| 2026-09-20 | 0 | **Phase 0 complete — tagged `phase-0`** | `git tag phase-0` |
 
 ---
 
@@ -68,15 +71,15 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 Checkpoints are hard gates (PLAN §2.4). If one is missed, apply the cut list in §2.4 **in order**
 before continuing — do not silently slip.
 
-### Phase 0 — Environment and skeleton (Day 1 am, ~4 h, 2/10) — IN PROGRESS
+### Phase 0 — Environment and skeleton (Day 1 am, ~4 h, 2/10) — ✅ COMPLETE (2026-09-20)
 - [x] 1. Verify environment and VM allocation (§15.1)
 - [x] 7a. `CLAUDE.md` from §18.2
-- [~] 2. `git init` done and `PLAN.md` committed; **GitHub repo + push still outstanding**
+- [x] 2. `git init` + private GitHub repo + push; `PLAN.md` committed
 - [x] 3. Skeleton from §16: empty modules w/ docstrings, `pyproject.toml` (§15.3), `.python-version`, Makefile stubs, `.gitignore`, `.dockerignore`, `.env.example`, `src/fraud/config.py`
 - [x] 4. `uv lock && uv sync --all-groups`
 - [x] 5. `docker-compose.yml` with the `redis` service only; `make redis-up` → `PONG`
-- [~] 6. `.github/workflows/ci.yml` (`lint-unit`) + `tests/test_smoke.py` — written and locally verified; **unproven until it runs on GitHub**
-- [ ] 7b. Commit + push; `make setup && make lint && make test` green; tag `phase-0`
+- [x] 6. `.github/workflows/ci.yml` (`lint-unit`) + `tests/test_smoke.py` — green on GitHub
+- [x] 7b. Commit + push; `make setup && make lint && make test` green; tag `phase-0`
 
 ### Phase 1 — Simulator (Day 1 pm → Day 3 midday, ~16 h, 5/10)
 - [ ] 1. Configs: `sim.yaml`, `sim_tiny.yaml`, `cities.csv` (15 IN + 8 intl), `categories.yaml`, `splits.yaml`
@@ -194,6 +197,7 @@ Record anything that departs from the plan, with the reason. Empty so far.
 | 2026-09-20 | Makefile test targets now export `TEST_REDIS_URL` (DB 15) instead of inheriting `REDIS_URL` (DB 0) | The global `export REDIS_URL` leaked DB 0 into tests, which would have flushed live scorer state in Phase 6 | §13, §16.1 |
 | 2026-09-20 | CI pins `actions/checkout@v7` and `astral-sh/setup-uv@v10`, not the plan's v5/v6 | §14 says to use the current major version; v7 and v10 are current as of today | §14 |
 | 2026-09-20 | CI runs `make lint` / `make test` instead of the raw `uv run ruff`/`pytest` lines | Keeps the CI gates identical to the local ones so they cannot drift. The `uv sync --frozen` step is kept exactly as the plan has it | §14 |
+| 2026-09-20 | `setup-uv` pinned to the exact `v10.1.0`, not a floating major | The project publishes floating major tags only through v7; `@v10` does not resolve and failed the first CI run | §14, §15.3 |
 
 ---
 
