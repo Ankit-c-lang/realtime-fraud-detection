@@ -5,29 +5,31 @@ that task. Source of truth for *what* to build is `PLAN.md`; this file only trac
 
 - **Plan version:** v1 (2026-09-16) · **Started:** 2026-09-20
 - **Current phase:** Phase 1 — Simulator (PLAN §17, Phase 1) · Phase 0 complete, tagged `phase-0`
-- **Phase 1 progress:** 5 / 8 tasks
-- **Overall:** 13 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Phase 1 progress:** 7 / 8 tasks
+- **Overall:** 15 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Phase 1 · Task 6 — `src/fraud/sim/checks.py` + `reports/sim_report.md` (PLAN §4.8, prompt P1.5).**
-Run every §4.8 validation against a full generated dataset and write the report: fraud
-prevalence in [1.0%, 2.0%] with each pattern within ±30% of target, card-testing device
-fan-out, ATO impossible-travel rate, the ring constraints, hard negatives present in
-workable numbers, event schema free of label columns, `txn_id` unique and sorted, and a
-same-seed hash match. Include a few worked example attacks and the sha256 of `sim.yaml`.
+**Phase 1 · Task 8 — freeze the simulator and tag `sim-v1` (PLAN §4.8).**
+Everything the freeze needs is in place: `reports/sim_report.md` records the sha256 of
+`configs/sim.yaml` and all 26 checks pass on the full run. What remains is the decision.
 
-Blocked on nothing.
+**Waiting on you.** After the freeze §4.8 allows exactly one revision (`sim-v2`), only if
+validation PR-AUC comes back above 0.995 in Phase 3, and never after looking at test
+metrics. Worth a last look at the unspecified constants first (see deviations): the
+category medians and sigmas, Zipf exponent 1.10, diurnal peak sigmas, the
+decline-vs-amount exponent and the office Pareto alpha all shape the data and all become
+fixed at the freeze.
 
 ---
 
 ## Next up (in order)
 
-1. **P1.5** — `src/fraud/sim/checks.py` + `reports/sim_report.md` (see *Currently working on*).
-2. Freeze `configs/sim.yaml`, record its sha256 in the report, commit and tag `sim-v1`.
-3. Then **Phase 2** — `features/spec.py`, `state.py` and the 30 hot features (§5.1-§5.4).
+1. **Freeze decision** — confirm `configs/sim.yaml` is final, then tag `sim-v1` (see *Currently working on*).
+2. Then **Phase 2** — `features/spec.py` (`FEATURE_NAMES`, `FEATURE_SPEC_VERSION = "fs1"`), `state.py` (`AccountState` with an exact JSON round trip), `accounts.py`, then `engine.py` and the 30 hot features (§5.1-§5.4).
+3. `store_memory.py` and `replay.py` -> `hot_features.parquet` plus the checkpoint at `test_start`.
 
 ---
 
@@ -71,6 +73,8 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-20 | 1 | `src/fraud/sim/patterns.py`: all four injectors, ring mule accounts, deliberate ring placement | `tests/test_sim_patterns.py`, 24 tests; full config 8,362 fraud events in 2.4 s, prevalence 1.683%; every §4.5 quota and §4.8 signature check met |
 | 2026-09-20 | 1 | RING target corrected 3000 -> 4250 in `sim.yaml` (approved); RING restored to the standard §4.8 band test | Now +0.8% of target; `test_ring_target_agrees_with_the_ring_structure` pins the two together |
 | 2026-09-20 | 1 | `src/fraud/sim/generate.py` + `make data`: four Parquet tables and `manifest.json` | `tests/test_sim_schema.py` (16) and `tests/test_sim_determinism.py` (7); full run 494,156 events, 1.687% fraud, 14 MB, **79 s** |
+| 2026-09-20 | 1 | `src/fraud/sim/checks.py`: all 26 §4.8 validations, exits non-zero on failure | `tests/test_sim_checks.py`, 11 tests, each group proven to fail on corrupted data |
+| 2026-09-20 | 1 | `reports/sim_report.md` committed: **26/26 pass**, config sha256 `97404e57…` | `make data` |
 
 ---
 
@@ -95,8 +99,8 @@ before continuing — do not silently slip.
 - [x] 3. `sim/legit.py` — legitimate behaviour + all hard negatives (§4.4)
 - [x] 4. `sim/patterns.py` — 4 fraud injectors + ring constraints (§4.5)
 - [x] 5. `sim/generate.py` — assemble, stable sort, `txn_id`, Parquet + `manifest.json`
-- [ ] 6. `sim/checks.py` — §4.8 checks → `reports/sim_report.md`
-- [ ] 7. `test_sim_*` tests
+- [x] 6. `sim/checks.py` — §4.8 checks → `reports/sim_report.md`
+- [x] 7. `test_sim_*` tests
 - [ ] 8. **Freeze** `sim.yaml` (hash in report), commit, tag `sim-v1`
 - **Gate:** ~500K events, 1.2-1.8% fraud, ≥12 rings start in test window (≥4 reusing a device), same seed → same hashes
 
