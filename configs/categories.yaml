@@ -1,0 +1,78 @@
+# Merchant categories (PLAN §4.3).
+#
+# THE ORDER OF THIS LIST IS FIXED. It defines the integer codes used for the
+# categorical feature, so reordering silently changes the meaning of a trained
+# model. Append only, and bump FEATURE_SPEC_VERSION when you do (PLAN §5.2).
+#
+# amount_median  median transaction amount in rupees; the lognormal median
+# amount_sigma   sigma of the lognormal, in log space (bigger = longer tail)
+# online_share   P(channel == ONLINE) for this category
+# merchant_share fraction of all merchants in this category; must sum to 1.0
+#
+# Actual amount = amount_median * account spend_level * lognormal(0, amount_sigma).
+
+categories:
+  - name: grocery
+    amount_median: 850.0
+    amount_sigma: 0.60
+    online_share: 0.10
+    merchant_share: 0.16
+
+  - name: fuel
+    amount_median: 1200.0
+    amount_sigma: 0.45
+    online_share: 0.02
+    merchant_share: 0.07
+
+  - name: restaurants
+    amount_median: 650.0
+    amount_sigma: 0.70
+    online_share: 0.35
+    merchant_share: 0.18
+
+  - name: pharmacy
+    amount_median: 420.0
+    amount_sigma: 0.65
+    online_share: 0.20
+    merchant_share: 0.08
+
+  - name: utilities
+    amount_median: 1800.0
+    amount_sigma: 0.55
+    online_share: 0.95
+    merchant_share: 0.04
+
+  - name: ecommerce
+    amount_median: 1400.0
+    amount_sigma: 0.90
+    online_share: 1.00
+    merchant_share: 0.17
+
+  # High-value and a common cash-out target for ATO and card testing (PLAN §4.5).
+  - name: electronics
+    amount_median: 9500.0
+    amount_sigma: 0.85
+    online_share: 0.55
+    merchant_share: 0.06
+
+  - name: travel
+    amount_median: 6500.0
+    amount_sigma: 0.95
+    online_share: 0.85
+    merchant_share: 0.05
+
+  # Low-friction: tiny amounts, instant fulfilment, weak verification.
+  # Card-testing attacks target these merchants, and so do legitimate customers,
+  # which is exactly the hard negative in PLAN §4.4.
+  - name: digital_goods
+    amount_median: 299.0
+    amount_sigma: 0.70
+    online_share: 1.00
+    merchant_share: 0.12
+
+  # The other common cash-out target (PLAN §4.5).
+  - name: gift_cards_wallet
+    amount_median: 2000.0
+    amount_sigma: 0.80
+    online_share: 0.95
+    merchant_share: 0.07

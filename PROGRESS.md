@@ -5,28 +5,33 @@ that task. Source of truth for *what* to build is `PLAN.md`; this file only trac
 
 - **Plan version:** v1 (2026-09-16) · **Started:** 2026-09-20
 - **Current phase:** Phase 1 — Simulator (PLAN §17, Phase 1) · Phase 0 complete, tagged `phase-0`
-- **Overall:** 8 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Phase 1 progress:** 1 / 8 tasks
+- **Overall:** 9 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Phase 1 · Task 1 — simulator configs (PLAN §4.2-§4.3, prompt P1.1).**
-Write `configs/sim.yaml` and `configs/sim_tiny.yaml` (population, patterns, hard negatives, seed),
-`configs/cities.csv` (15 Indian + 8 international cities with approximate lat/lon and weights),
-`configs/categories.yaml` (10 categories in a fixed order, lognormal median/sigma, POS/ONLINE mix)
-and `configs/splits.yaml` (§4.7 — the only place split dates ever live).
+**Phase 1 · Task 2 — `src/fraud/sim/population.py` (PLAN §4.3, prompt P1.1).**
+Build the static population from `configs/sim.yaml`, with no event generation yet:
+accounts (90% pre-existing, 10% created mid-simulation), merchants (Zipf popularity, 20
+low-friction, 60 colluding created mid-simulation), devices (1 per account for 85%, 2 for 15%,
+5% mid-simulation upgrades, 8% in families of 2-4 sharing a household device) and the four IP
+pools (home, carrier NAT, office/college, VPN).
 
-Blocked on nothing. Read PLAN §4.1-§4.3 and §4.7 first.
+All randomness from `numpy.random.SeedSequence(seed).spawn(...)` so each component draws
+independently and reproducibly (§4.8). Vectorise across accounts.
+
+Blocked on nothing.
 
 ---
 
 ## Next up (in order)
 
-1. **P1.1a** — the four configs plus `cities.csv` (see *Currently working on*).
-2. **P1.1b** — `src/fraud/sim/population.py`: accounts (incl. mid-simulation ones), merchants (20 low-friction, 60 colluding), devices (families, phone upgrades), IP pools (home, carrier NAT, office/college, VPN). NumPy Generators spawned from one SeedSequence. No event generation yet.
-3. **P1.1c** — `tests/test_sim_population.py`.
-4. Then P1.2: `sim/legit.py` and the hard negatives (§4.4).
+1. **P1.1b** — `src/fraud/sim/population.py` (see *Currently working on*).
+2. **P1.1c** — `tests/test_sim_population.py` against `sim_tiny.yaml`.
+3. **P1.2** — `src/fraud/sim/legit.py`: Poisson daily counts, diurnal times, regular-merchant mix, amounts, declines, and every hard negative in §4.4. Vectorised per account.
+4. **P1.3** — `src/fraud/sim/patterns.py`: the four injectors and the ring constraints (§4.5).
 
 ---
 
@@ -63,6 +68,7 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-20 | 0 | Private repo created and `main` pushed | github.com/Ankit-c-lang/realtime-fraud-detection (PRIVATE) |
 | 2026-09-20 | 0 | **CI green on GitHub** after fixing an unresolvable `setup-uv@v10` pin | run 35504020945, `lint-unit` ✓ in 20s |
 | 2026-09-20 | 0 | **Phase 0 complete — tagged `phase-0`** | `git tag phase-0` |
+| 2026-09-20 | 1 | `configs/splits.yaml` (§4.7), `categories.yaml` (10 fixed levels), `cities.csv` (15 IN + 8 intl), `sim.yaml` and `sim_tiny.yaml` | `tests/test_configs.py`, 24 tests |
 
 ---
 
@@ -81,8 +87,8 @@ before continuing — do not silently slip.
 - [x] 6. `.github/workflows/ci.yml` (`lint-unit`) + `tests/test_smoke.py` — green on GitHub
 - [x] 7b. Commit + push; `make setup && make lint && make test` green; tag `phase-0`
 
-### Phase 1 — Simulator (Day 1 pm → Day 3 midday, ~16 h, 5/10)
-- [ ] 1. Configs: `sim.yaml`, `sim_tiny.yaml`, `cities.csv` (15 IN + 8 intl), `categories.yaml`, `splits.yaml`
+### Phase 1 — Simulator (Day 1 pm → Day 3 midday, ~16 h, 5/10) — IN PROGRESS
+- [x] 1. Configs: `sim.yaml`, `sim_tiny.yaml`, `cities.csv` (15 IN + 8 intl), `categories.yaml`, `splits.yaml`
 - [ ] 2. `sim/population.py` — accounts, merchants, devices, IP pools
 - [ ] 3. `sim/legit.py` — legitimate behaviour + all hard negatives (§4.4)
 - [ ] 4. `sim/patterns.py` — 4 fraud injectors + ring constraints (§4.5)
@@ -198,6 +204,9 @@ Record anything that departs from the plan, with the reason. Empty so far.
 | 2026-09-20 | CI pins `actions/checkout@v7` and `astral-sh/setup-uv@v10`, not the plan's v5/v6 | §14 says to use the current major version; v7 and v10 are current as of today | §14 |
 | 2026-09-20 | CI runs `make lint` / `make test` instead of the raw `uv run ruff`/`pytest` lines | Keeps the CI gates identical to the local ones so they cannot drift. The `uv sync --frozen` step is kept exactly as the plan has it | §14 |
 | 2026-09-20 | `setup-uv` pinned to the exact `v10.1.0`, not a floating major | The project publishes floating major tags only through v7; `@v10` does not resolve and failed the first CI run | §14, §15.3 |
+| 2026-09-20 | `sim_tiny.yaml` keeps the full 90-day calendar, shrinking only population and attack volumes | Lets `configs/splits.yaml` apply unchanged so every structural check runs against the tiny config too | §4.8 |
+| 2026-09-20 | `sim_tiny.yaml` ring thresholds are far lower than §4.5 (1 in test vs 12, 3 in train vs 20) | The §4.5 constraints need ~40 rings; 40 rings in a 20K-event set would push prevalence well past 2%. Thresholds live in the config so one check implementation serves both files. **The full `sim.yaml` keeps the real §4.5 values** | §4.5, §4.8 |
+| 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---
 

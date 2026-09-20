@@ -1,0 +1,238 @@
+# Simulator configuration (PLAN §4.3-§4.5).
+#
+# FROZEN AT THE END OF PHASE 1. sha256 of this file is recorded in
+# reports/sim_report.md and in every model's metadata (PLAN §4.8, §8).
+# After the freeze, metrics are never improved by editing this file.
+# The one permitted revision is sim-v2, only if validation PR-AUC > 0.995,
+# only once, and only with the reason written in the README (PLAN §4.8).
+
+seed: 42
+generator_version: 1
+
+# Simulated window. Must cover every split in configs/splits.yaml (90 days).
+start: 2026-01-01
+days: 90
+timezone: Asia/Kolkata
+
+# generate.py rescales per-account activity to land inside this band.
+target_transactions: 500000
+target_tolerance: 0.05
+
+# Reference data. Weights in cities.csv are relative WITHIN a country group;
+# the IN rows sum to 1.0 and the non-IN rows sum to 1.0 (PLAN §4.3).
+cities_file: cities.csv
+categories_file: categories.yaml
+
+# --- accounts (PLAN §4.3) ---------------------------------------------------
+accounts:
+  n: 22000
+  # 10% are created DURING the simulation. Without these, "young account" would
+  # be a perfect fraud predictor and the ring pattern would be trivial (§4.4).
+  existing_share: 0.90
+  existing_created_start: 2023-01-01
+  existing_created_end: 2025-12-31
+
+  # Transactions per account per day, lognormal. Rescaled to hit target_transactions.
+  activity_rate:
+    median_per_day: 0.18
+    sigma: 0.80
+
+  # Multiplies every amount this account makes. Lognormal.
+  spend_level:
+    median: 1.0
+    sigma: 0.50
+
+  # Each account keeps a small set of merchants it returns to.
+  regular_merchants_min: 5
+  regular_merchants_max: 15
+  regular_share: 0.70          # 70% of purchases go to a regular merchant
+
+# --- merchants (PLAN §4.3) --------------------------------------------------
+merchants:
+  n: 2000
+  # Merchant popularity follows Zipf, so a few hubs carry most volume.
+  zipf_exponent: 1.10
+  international_share: 0.05
+  # Tiny digital merchants that card testing abuses, and that real customers
+  # also use. Drawn from the categories listed below.
+  n_low_friction: 20
+  low_friction_categories: [digital_goods]
+  # Created mid-simulation, used by rings to cash out (§4.5).
+  n_colluding: 60
+  colluding_categories: [electronics, gift_cards_wallet, digital_goods]
+
+# --- devices (PLAN §4.3) ----------------------------------------------------
+devices:
+  two_device_share: 0.15       # 85% own one device, 15% own two
+  upgrade_share: 0.05          # 5% replace their phone mid-simulation
+  # Households sharing one device: a legitimate shared-device cluster, which is
+  # the hard negative the ring pattern must be distinguished from (§4.4).
+  family_share: 0.08
+  family_size_min: 2
+  family_size_max: 4
+  family_device_share: 0.40    # share of a family member's transactions on it
+
+# --- IP pools (PLAN §4.3) ---------------------------------------------------
+ip_pools:
+  # Carrier-grade NAT: thousands of unrelated accounts behind a few IPs.
+  # The fan-out cap in configs/graph.yaml must drop these (§6.1).
+  carrier_nat:
+    n_ips: 40
+    account_share: 0.45
+    usage_share: 0.50          # of an affected account's ONLINE transactions
+  # Mid-size legitimate clusters that the cap must NOT drop.
+  office:
+    n_ips: 60
+    account_share: 0.25
+    group_size_min: 5
+    group_size_max: 150
+    group_size_alpha: 1.60     # heavy tail (Pareto)
+    active_hours: [9, 18]
+    weekdays_only: true
+  # Legitimate "impossible travel": foreign IP, same device (§4.4).
+  vpn:
+    n_ips: 10
+    account_share: 0.02
+    usage_share: 0.10          # of an affected account's ONLINE transactions
+
+# --- legitimate behaviour (PLAN §4.4) ---------------------------------------
+legit:
+  # Daily count ~ Poisson(activity_rate * weekday_factor).
+  weekday_factor: [1.00, 0.98, 1.00, 1.05, 1.20, 1.30, 1.10]   # Mon..Sun
+  # Time of day: mixture of two normals plus a uniform floor. Quiet 01:00-06:00.
+  diurnal:
+    peaks_hour: [13.0, 20.0]
+    peaks_sigma: [2.2, 2.4]
+    peaks_weight: [0.45, 0.45]
+    uniform_weight: 0.10
+    quiet_hours: [1, 6]
+    quiet_factor: 0.15
+  night_owl_share: 0.05
+  night_owl_shift_hours: 5.0
+  decline_rate: 0.015
+  # Declines get likelier with size: rate * (amount / median) ** exponent, capped.
+  decline_amount_exponent: 0.35
+  decline_rate_max: 0.08
+
+# --- hard negatives (PLAN §4.4) ---------------------------------------------
+# Each one imitates a fraud signal. Without them the models learn shortcuts.
+hard_negatives:
+  travel:                      # imitates ATO location jumps
+    account_share: 0.04
+    trip_days_min: 2
+    trip_days_max: 7
+    domestic_share: 0.75
+    min_gap_hours_domestic: 2.0
+    min_gap_hours_international: 6.0
+  shopping_spree:              # imitates velocity abuse
+    account_day_share: 0.02
+    extra_txns_min: 4
+    extra_txns_max: 8
+    window_minutes: 90
+    merchants_min: 2
+    merchants_max: 5
+  micro_burst:                 # imitates card testing
+    account_share: 0.03
+    episodes_min: 1
+    episodes_max: 3
+    txns_min: 5
+    txns_max: 12
+    window_minutes: 60
+    amount_max: 100.0
+
+# --- fraud patterns (PLAN §4.5) ---------------------------------------------
+# Target total is about 1.5% of all transactions. checks.py asserts each count
+# is within +/-30% of its target and overall prevalence is in [1.0%, 2.0%].
+patterns:
+  velocity:
+    n_attacks: 60
+    target_transactions: 1500
+    txns_min: 10
+    txns_max: 30
+    window_minutes_min: 3
+    window_minutes_max: 15
+    merchants_min: 1
+    merchants_max: 4
+    categories: [ecommerce, digital_goods, gift_cards_wallet]
+    new_device_share: 0.70     # 30% use the victim's own device
+    amount_median: 2500.0
+    amount_sigma: 0.70
+    amount_cap: 20000.0
+    decline_rate_min: 0.05
+    decline_rate_max: 0.15
+
+  ato:
+    n_attacks: 120
+    target_transactions: 600
+    victim_min_prior_txns: 10
+    txns_min: 3
+    txns_max: 8
+    window_minutes_min: 30
+    window_minutes_max: 180
+    categories: [electronics, gift_cards_wallet, travel]
+    foreign_ip_share: 0.60     # 40% are another Indian city
+    # The giveaway: a legitimate POS purchase at home shortly before.
+    lag_after_legit_minutes_min: 5
+    lag_after_legit_minutes_max: 60
+    amount_mult_min: 3.0
+    amount_mult_max: 10.0
+    amount_cap: 150000.0
+    decline_rate: 0.10
+
+  card_testing:
+    n_attacks: 50
+    target_transactions: 2300
+    victims_min: 20            # checks.py asserts >= 20 accounts per device/hour
+    victims_max: 60
+    window_minutes_min: 20
+    window_minutes_max: 60
+    merchants_min: 1
+    merchants_max: 2
+    vpn_share: 0.50            # 50% residential
+    amount_min: 1.0
+    amount_max: 50.0
+    decline_rate_min: 0.40
+    decline_rate_max: 0.60
+    cashout_share: 0.30        # of APPROVED victims
+    cashout_delay_hours_min: 1
+    cashout_delay_hours_max: 12
+    cashout_amount_min: 5000.0
+    cashout_amount_max: 40000.0
+    cashout_categories: [electronics, gift_cards_wallet]
+
+  ring:
+    n_rings: 45
+    target_transactions: 3000
+    accounts_min: 6
+    accounts_max: 15
+    account_age_days_min: 3    # created 3-30 days before the ring starts
+    account_age_days_max: 30
+    devices_min: 2
+    devices_max: 4
+    ips_min: 1
+    ips_max: 3
+    active_days_min: 5
+    active_days_max: 25
+    txns_per_account_min: 6
+    txns_per_account_max: 12
+    colluding_share: 0.60      # 40% at ordinary popular merchants
+    # Amounts, hours and approval rates deliberately look NORMAL. The only
+    # signal is the connection structure, which is the point of the graph layer.
+    device_reuse_share: 0.30   # rings reusing a device from a ring in the last 30 days
+    device_reuse_lookback_days: 30
+    # Constraints checks.py enforces (PLAN §4.5). These make the evaluation mean
+    # something: without them the test window might contain no fresh rings.
+    min_rings_in_test: 12
+    min_rings_in_test_with_device_reuse: 4
+    min_rings_fully_in_train: 20
+
+# --- labels (PLAN §4.6) -----------------------------------------------------
+labels:
+  # Chargebacks arrive late. label_available_at = event_time + this.
+  # The graph job may only seed from labels already available at snapshot time.
+  delay_days: 14
+
+# --- output -----------------------------------------------------------------
+output:
+  compression: zstd
+  txn_id_format: "T{:07d}"

@@ -1,0 +1,47 @@
+# Time splits (PLAN §4.7). THE SINGLE SOURCE OF TRUTH for split dates.
+#
+# Nothing else in this repository may hard-code a split date: src/fraud/modeling/splits.py
+# is the only loader, and the test split is readable only with ALLOW_TEST=1 (PLAN §7.11).
+#
+# Every interval is HALF-OPEN: [start, end). end is exclusive, so consecutive splits
+# share a boundary without overlapping and no event can land in two splits.
+# Dates are midnight IST; the simulator emits naive IST timestamps (PLAN §3.5).
+
+timezone: Asia/Kolkata
+
+splits:
+  # Days 1-14. Builds up feature state. Excluded from training AND evaluation,
+  # because these rows have windows that are only partly populated.
+  burn_in:
+    start: 2026-01-01
+    end: 2026-01-15
+    approx_rows: 78000
+
+  # Days 15-53. Model fitting, Isolation Forest fitting, anomaly reference quantiles.
+  train:
+    start: 2026-01-15
+    end: 2026-02-23
+    approx_rows: 217000
+
+  # Days 54-60. XGBoost early stopping ONLY. Never used for model selection.
+  early_stop:
+    start: 2026-02-23
+    end: 2026-03-02
+    approx_rows: 39000
+
+  # Days 61-72. Model selection, blend weight, decision thresholds.
+  valid:
+    start: 2026-03-02
+    end: 2026-03-14
+    approx_rows: 67000
+
+  # Days 73-90. Final evaluation, run exactly once (PLAN §7.11).
+  # This is also the window replayed live through Redis (PLAN §9.1).
+  test:
+    start: 2026-03-14
+    end: 2026-04-01
+    approx_rows: 100000
+
+# The offline state checkpoint is taken at this boundary so the live replay can
+# start with warm state (PLAN §5.5, §9.5). It must equal splits.test.start.
+checkpoint_at: 2026-03-14
