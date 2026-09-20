@@ -1,0 +1,36 @@
+[project]
+name = "fraud"
+version = "0.1.0"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [                     # runtime: everything the containers need
+  "numpy", "pandas", "pyarrow", "duckdb",
+  "redis", "networkx", "sortedcontainers",
+  "scikit-learn", "xgboost", "joblib",
+  "pydantic>=2", "pyyaml",
+  "fastapi", "uvicorn[standard]", "httpx",
+  "streamlit",
+]
+
+[dependency-groups]
+dev = ["pytest", "pytest-cov", "ruff"]
+sim = ["faker"]                                  # optional: readable merchant names only
+analysis = ["shap", "matplotlib", "ipykernel"]   # offline plots and notebooks
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fraud"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "redis: needs a Redis server at REDIS_URL",
+  "slow: takes more than a few seconds",
+]

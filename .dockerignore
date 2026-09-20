@@ -1,0 +1,22 @@
+.git/
+.github/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Generated at runtime and bind-mounted, never baked into the image (PLAN §12.2)
+data/
+models/
+reports/
+notebooks/
+tests/
+
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.env
+*.tmp
+PLAN.md
+PROGRESS.md
