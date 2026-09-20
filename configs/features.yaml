@@ -1,0 +1,45 @@
+# Feature engine parameters (PLAN §5.1-§5.2).
+#
+# Not part of the sim-v1 freeze: this describes how features are derived from the frozen
+# data, not the data itself. Changing any value here changes a feature definition, which
+# means bumping FEATURE_SPEC_VERSION in src/fraud/features/spec.py.
+#
+# All windows are half-open [t - w, t) and measured in EVENT time (§5.1 rules 1-2).
+
+windows:
+  short_seconds: 300        # 5 minutes
+  hour_seconds: 3600
+  day_seconds: 86400        # 24 hours
+  month_seconds: 2592000    # 30 days
+
+# Amount below which a transaction counts as "small" (the card-testing probe signature).
+small_amount: 100.0
+
+# Cold-start and cap values (§5.1 rule 4).
+defaults:
+  secs_since_last: 2592000  # 30 days, also the cap for a real gap
+  amount_to_mean: 1.0
+  geo_speed_kmh: 0.0
+
+amount_zscore:
+  min_prior_approved: 3     # below this the standard deviation is meaningless, so 0
+  std_floor_ratio: 0.25     # of the mean
+  std_floor_abs: 50.0       # rupees
+  clip_low: -10.0
+  clip_high: 50.0
+
+amount_to_mean_clip: 100.0
+
+geo:
+  speed_cap_kmh: 5000.0
+  min_elapsed_seconds: 60   # floor, so a rapid pair is not a division by zero
+
+# 4-hour buckets, smoothed by (c + 1) / (n + 6) so a cold account is not "unusual".
+hour_bucket_hours: 4
+hour_bucket_count: 6
+
+# is_night covers [0, 5).
+night_hours: [0, 5]
+
+# Devices last used longer ago than this drop out of the account blob.
+device_retention_days: 90

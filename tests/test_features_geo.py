@@ -10,9 +10,9 @@ from __future__ import annotations
 from datetime import timedelta
 
 import pytest
+from feature_helpers import DELHI, MUMBAI, at, last_row, make_event
 
 from fraud.features.engine import haversine_km
-from tests.feature_helpers import DELHI, MUMBAI, at, last_row, make_event
 
 # Great-circle Delhi to Mumbai, computed directly from the two coordinate pairs.
 DELHI_MUMBAI_KM = 1148.09

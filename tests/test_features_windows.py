@@ -14,8 +14,7 @@ from __future__ import annotations
 from datetime import timedelta
 
 import pytest
-
-from tests.feature_helpers import (
+from feature_helpers import (
     CREATED_AT,
     DELHI,
     MUMBAI,
