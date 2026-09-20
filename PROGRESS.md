@@ -8,20 +8,30 @@ that task. Source of truth for *what* to build is `PLAN.md`; this file only trac
 - **Phase 1 progress:** 8 / 8 ✅ — **simulator FROZEN, tagged `sim-v1`**
 - **Phase 2 progress:** 7 / 7 ✅ — tagged `phase-2`
 - **Phase 3 progress:** 6 / 6 ✅ (E3 ablation belongs to Phase 4)
-- **Overall:** 30 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Overall:** 32 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Phase 4 · Task 3 — `src/fraud/graph/snapshots.py` (PLAN §6.2, prompt P4.3).**
-Build all 89 daily offline snapshots from 2026-01-02 to 2026-03-31 into
-`data/graph/offline/snapshot_ts=<T>/part.parquet`, plus `calendar.parquet`. Log the
-runtime per snapshot: §6.1 says switch to weekly and document it if a full run passes
-~10 minutes. Measured on one snapshot it is ~1.6 s, so ~2.5 min is expected.
+**Phase 4 · Task 4 — experiment E3, the graph ablation (PLAN §7.9, prompt P4.4).**
+Train XGBoost on all 36 features using **parameter set P unchanged** from E2, so the
+comparison measures the graph and not a luckier hyperparameter draw. Then the ablation
+table: E3 vs E2, overall and per pattern.
 
-Then `graph/join.py`: the two-step point-in-time join (§6.4). Never an ASOF keyed on the
-account — that is the stale-value trap the plan calls out.
+**Set expectations honestly.** E2 already catches 100% of rings, so E3 cannot show a
+recall gain — that headroom was gone before sim-v2 and the revision is spent. What E3 can
+show, and what the README will report:
+
+- whether the graph features are *selected* by the model at all, and where they rank;
+- how much they separate rings on their own. In the training table the signal is strong:
+  ring `community_young_share` averages 0.500 against 0.003 for legitimate rows, and
+  `graph_degree` 11.6 against 0.68, with 99.6% of ring rows carrying a non-default
+  position;
+- whether rings survive ablating the behavioural features that currently catch them.
+
+If the honest conclusion is that the graph adds nothing measurable on top, that is what
+gets written down.
 
 Blocked on nothing.
 
@@ -29,7 +39,7 @@ Blocked on nothing.
 
 ## Next up (in order)
 
-1. **P4.3** — `graph/snapshots.py` + `graph/join.py` -> `training_table.parquet` (see *Currently working on*).
+1. **P4.4** — E3 on 36 features with parameter set P, plus the ablation table (see *Currently working on*).
 2. **P4.2** — `graph/algorithms.py`: degree, clustering, seeded Louvain, community aggregates, personalised PageRank with the 14-day label delay.
 3. **P4.3** — `graph/snapshots.py` (89 daily snapshots, log the runtime; over ~10 min means switch to weekly) and `graph/join.py` (the two-step point-in-time join).
 4. **P4.4** — **E3** on 36 features with parameter set P unchanged, plus the ablation table.
@@ -97,6 +107,8 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-20 | 4 | `configs/graph.yaml`: **`device_cap: 16`, `ip_cap: 18`** chosen against the train-only fan-out distributions | `reports/entity_fanout.md` |
 | 2026-09-20 | 4 | `graph/projection.py` (DuckDB, sorted edges) and `graph/algorithms.py` (degree, clustering, seeded Louvain, community aggregates, personalised PageRank) | `test_graph_projection.py` (13), `test_graph_algorithms.py` (16), `test_graph_leakage.py` (13) |
 | 2026-09-20 | 4 | Real snapshot at 2026-02-20: 2,614 nodes, 6,143 edges, 642 communities, 320 seeds in 1.6 s. **Clustering mean 0.794, non-zero on 82%** | confirms the §1 bipartite correction |
+| 2026-09-20 | 4 | `graph/snapshots.py` + `graph/join.py` + `make graph`: **89 snapshots in 104.5 s** (slowest 1.34 s), 533-2,653 nodes, 0-370 seeds | `data/graph/offline/`, `calendar.parquet` |
+| 2026-09-20 | 4 | `training_table.parquet`: 494,189 rows, all 36 features, 0 NaN, 12.6% with a non-default graph position | `tests/test_asof_join.py`, 12 tests |
 | 2026-09-20 | 1 | **SIMULATOR FROZEN — tagged `sim-v1`.** `configs/sim.yaml` sha256 `97404e57e5da143b1f1b47c11caac96d315ce5fe85da1f47feba5cda9976863f` matches the report and the run manifest | `git tag sim-v1`; CLAUDE.md invariant 11 |
 
 ---
@@ -150,8 +162,8 @@ before continuing — do not silently slip.
 - [x] 1. Measure accounts-per-device / per-IP on train; set `device_cap`, `ip_cap` in `graph.yaml`
 - [x] 2. `graph/projection.py` (§6.1 SQL, with `ORDER BY`)
 - [x] 3. `graph/algorithms.py` — degree, clustering, seeded Louvain, community aggregates, personalized PageRank w/ label delay
-- [ ] 4. `graph/snapshots.py` — daily offline snapshots + `calendar.parquet`
-- [ ] 5. `graph/join.py` — two-step point-in-time join → `training_table.parquet`
+- [x] 4. `graph/snapshots.py` — daily offline snapshots + `calendar.parquet`
+- [x] 5. `graph/join.py` — two-step point-in-time join → `training_table.parquet`
 - [ ] 6. **E3** (36 features, param set P) + ablation vs E2
 - [ ] 7. `test_graph_*`, `test_asof_join.py`
 - **Gate:** 89 snapshots < ~10 min (else weekly + document); E3 ring recall clearly above E2

@@ -53,7 +53,8 @@ features:  ## Offline replay to hot_features.parquet plus the checkpoint (PLAN �
 	$(RUN) python -m fraud.features.replay
 
 graph:  ## Build graph snapshots and the point-in-time join (PLAN §6)
-	@echo "not implemented yet: $@ — Phase 4, PLAN §6"; exit 1
+	$(RUN) python -m fraud.graph.snapshots
+	$(RUN) python -m fraud.graph.join
 
 experiments:  ## Run E1-E5 on the validation split (PLAN §7.9)
 	$(RUN) python -m fraud.modeling.experiments
