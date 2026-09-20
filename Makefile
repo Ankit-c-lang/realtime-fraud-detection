@@ -63,7 +63,7 @@ lopo:  ## Choose the blend weight by leave-one-pattern-out (PLAN §7.6)
 	$(RUN) python -m fraud.modeling.blend
 
 train:  ## Build the final model into models/<V> (PLAN §8)
-	@echo "not implemented yet: $@ — Phase 5, PLAN §8"; exit 1
+	$(RUN) python -m fraud.modeling.artifacts --version $(V)
 
 evaluate-test:  ## The single guarded test-set evaluation of models/<V> (PLAN §7.11)
 	@echo "not implemented yet: $@ — Phase 5, PLAN §7.11"; exit 1

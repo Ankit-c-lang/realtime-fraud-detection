@@ -9,33 +9,33 @@ that task. Source of truth for *what* to build is `PLAN.md`; this file only trac
 - **Phase 2 progress:** 7 / 7 ✅ — tagged `phase-2`
 - **Phase 3 progress:** 6 / 6 ✅ (E3 ablation belongs to Phase 4)
 - **Phase 4 progress:** 6 / 6 ✅
-- **Phase 5 progress:** 2 / 8
-- **Overall:** 36 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Phase 5 progress:** 6 / 8
+- **Overall:** 40 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Phase 5 · Task 3 — `src/fraud/modeling/decisions.py` (PLAN §7.7, prompt P5.2).**
-The REVIEW threshold `t_r` (max F1 inside the 2% alert budget) and the HOLD threshold
-`t_h` (lowest threshold at precision ≥ 0.95 with ≥ 50 alerts), both chosen on **valid**.
-HOLD freezes a real customer's card, so if no threshold clears the bar HOLD is disabled
-and the README has to say so rather than lowering it.
+**Phase 5 · Task 7 — E4/E5 on valid, then P5.3 (`evaluate_test.py`, `export_results.py`).**
+`models/v1` exists and loads through `RiskModel` with the compatibility checks passing.
+What remains is writing E4 and E5 to `reports/experiments/`, then `modeling/evaluate_test.py`
+(§7.11: `ALLOW_TEST=1`, one appended line in `reports/test_runs.log`) and
+`scripts/export_results.py`, which renders `reports/results.md` and the global
+contribution figure.
 
-Then `scoring/reasons.py` + `configs/reason_codes.yaml` (all 36 features),
-`modeling/artifacts.py` (`models/v1` + `CURRENT`) and `scoring/risk_model.py`.
+**The user runs `make evaluate-test V=v1` themselves — I do not run it.**
 
-Blocked on nothing. P5.1 is done: `w* = 0.5` in `reports/experiments/lopo.json`, so the
-§7.6 fallback is **not** needed.
+⚠️ Open decision for the user: **the HOLD tier is disabled** because it does not separate
+from REVIEW on this data (see the deviations table). It is reported, not tuned around.
 
 ---
 
 ## Next up (in order)
 
-1. **P5.2** — `decisions.py`, `scoring/reasons.py` + `configs/reason_codes.yaml`, `modeling/artifacts.py`, `scoring/risk_model.py`; `make train V=v1` must write `models/v1` + `models/CURRENT`.
-2. **P5.2 tests** — `test_scoring.py`, `test_reason_codes.py` (contributions sum to the model margin within 1e-4).
-3. **P5.3** — `modeling/evaluate_test.py` (§7.11) and `scripts/export_results.py` → `reports/results.md` + the global contribution figure. **The user runs `make evaluate-test V=v1` themselves.**
-4. **E4 / E5** on valid, written to `reports/experiments/`.
+1. **E4 / E5** written to `reports/experiments/` from `models/v1` and `lopo.json`.
+2. **P5.3** — `modeling/evaluate_test.py` (§7.11) and `scripts/export_results.py` → `reports/results.md` + `reports/figures/`.
+3. **`make evaluate-test V=v1`** — **run by the user, once.** Fills `metrics.test` in `models/v1/metadata.json` and appends to `reports/test_runs.log`.
+4. **Phase 6** — `features/store_redis.py` first, then the replayer and the scorer.
 
 ---
 
@@ -109,6 +109,10 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-20 | 1 | **SIMULATOR FROZEN — tagged `sim-v1`.** `configs/sim.yaml` sha256 `97404e57e5da143b1f1b47c11caac96d315ce5fe85da1f47feba5cda9976863f` matches the report and the run manifest | `git tag sim-v1`; CLAUDE.md invariant 11 |
 | 2026-09-20 | 5 | `modeling/iforest.py` — label-free Isolation Forest on all 213,215 train rows, 35 numeric features, 1,001-quantile percentile map, per-feature medians and spreads | `tests/test_iforest.py` 13 passed |
 | 2026-09-20 | 5 | `modeling/blend.py` + `make lopo` — four `XGB_-k` models, grid over `w`, `w*` by leave-one-pattern-out; **`w* = 0.5`**, so the Isolation Forest earns real weight and the §7.6 fallback is not needed | `reports/experiments/lopo.json`, `tests/test_blend.py` 17 passed |
+| 2026-09-20 | 5 | `modeling/decisions.py` — REVIEW threshold inside the 2% budget, HOLD threshold at the 0.95 precision bar, `decide()` → ALLOW/REVIEW/HOLD | `tests/test_scoring.py` |
+| 2026-09-20 | 5 | `configs/reason_codes.yaml` (all 36 features) + `scoring/reasons.py` — native `pred_contribs`, top-3 positive contributions, anomaly reason | additivity 2.0e-05 on 5,000 valid rows, `tests/test_reason_codes.py` 16 passed |
+| 2026-09-20 | 5 | `modeling/artifacts.py` + `make train V=v1` — **`models/v1` and `models/CURRENT` written** with the complete §8 metadata | `models/v1/` 6 files; 🚩 Day-8 checkpoint half met |
+| 2026-09-20 | 5 | `scoring/risk_model.py` — the one path from features to decisions, with startup refusals on feature-spec and library drift | `tests/test_scoring.py` 31 passed |
 
 ---
 
@@ -167,15 +171,15 @@ before continuing — do not silently slip.
 - [x] 7. `test_graph_*`, `test_asof_join.py`
 - **Gate:** 89 snapshots < ~10 min (else weekly + document); E3 ring recall clearly above E2
 
-### Phase 5 — Isolation Forest, blend, explanations, artifacts (Day 8, ~8 h, 5/10) — IN PROGRESS (2 / 8)
+### Phase 5 — Isolation Forest, blend, explanations, artifacts (Day 8, ~8 h, 5/10) — IN PROGRESS (6 / 8)
 - [x] 1. `modeling/iforest.py` — fit on train only, label-free ✅ 2026-09-20
 - [x] 2. `modeling/blend.py` — four `XGB_-k` models, grid over `w`, pick `w*` (§7.6); `w* = 0.5`, fallback not needed ✅ 2026-09-20
-- [ ] 3. `modeling/decisions.py` — REVIEW / HOLD thresholds on valid
-- [ ] 4. `scoring/reasons.py` + `configs/reason_codes.yaml` — top-3 reasons + anomaly reason
-- [ ] 5. `modeling/artifacts.py` — save/load `models/v1`, write `models/CURRENT`
-- [ ] 6. `scoring/risk_model.py` — `RiskModel.load()` / `score_batch()` + startup compat checks
+- [x] 3. `modeling/decisions.py` — REVIEW / HOLD thresholds on valid; **HOLD disabled, it does not separate** ✅ 2026-09-20
+- [x] 4. `scoring/reasons.py` + `configs/reason_codes.yaml` — top-3 reasons + anomaly reason, all 36 features ✅ 2026-09-20
+- [x] 5. `modeling/artifacts.py` — save/load `models/v1`, write `models/CURRENT`, `make train V=v1` ✅ 2026-09-20
+- [x] 6. `scoring/risk_model.py` — `RiskModel.load()` / `score_batch()` + startup compat checks ✅ 2026-09-20
 - [ ] 7. **E4**, **E5 (LOPO)** on valid, then `make evaluate-test V=v1` **exactly once** → `reports/results.md`
-- [ ] 8. `test_scoring.py`, `test_reason_codes.py`, `test_training_smoke.py` (part 2)
+- [x] 8. `test_scoring.py` (31) + `test_reason_codes.py` (16) ✅ 2026-09-20 · `test_training_smoke.py` part 2 still open
 - **🚩 CHECKPOINT (end of Day 8): `models/v1` + `reports/results.md` exist.** Exactly one line in `reports/test_runs.log`.
 
 ### Phase 6 — Streaming pipeline (Days 9-10, ~16 h, 7/10)
@@ -301,6 +305,11 @@ again in either file.
 | 2026-09-20 | **`w* = 0.5` sits at the edge of §7.6's grid and wins by ~2 transactions** | Mean LOPO recall: w=0.5 → 0.85553, w=0.7 → 0.85497, w=0.9 → 0.84424, w=1.0 → 0.73956. The curve is a noisy plateau from 0.9 down, and the margin between the top two is 0.00056 — about two rows across the four runs. `w*` is taken as the plan specifies (argmax, ties to the larger `w`); the grid was **not** extended past 0.5 to look for a better point, because that is tuning the plan rather than following it. The flatness is the honest caveat and belongs in the README | §7.6 |
 | 2026-09-20 | Anomaly-reason spread falls back to the standard deviation where the IQR is zero | §7.5 says "a small floor on the IQR". Most of these features are counts that are 0 for well over half of train, so their IQR is exactly 0 and a literal floor would make `\|x − median\| / IQR` enormous for any non-zero value — the sparsest feature would win every anomaly reason it appeared in. A zero IQR means the spread lives in the tails, so the standard deviation is used there; a genuinely constant column keeps a 1e-12 floor, where the numerator is 0 anyway | §7.5 |
 | 2026-09-20 | Isolation Forest and blend hyperparameters moved into `configs/model.yaml` (`iforest:`, `blend:`) | §7.5 and §7.6 give them as literals, but CLAUDE.md forbids hard-coded thresholds and §8 has to record them in the artifact metadata. Values are exactly the plan's | §7.5, §7.6 |
+| 2026-09-20 | **The HOLD tier is DISABLED: it does not separate from REVIEW on this data** | §7.7 picks `t_h` as the lowest threshold with precision ≥ 0.95 over ≥ 50 alerts, which assumes precision at the budget threshold is *below* the bar. Here it is **0.961**, so the whole alert set qualifies and `t_h == t_r` exactly: every one of the 909 alerts would become a HOLD, freezing 35 genuine customers and leaving the analyst queue empty. That is not a two-tier policy, so it is treated as §7.7's existing "nothing qualifies" case — HOLD off, the measured precision kept in metadata, and the README must say the tiers did not separate. The 0.95 bar was **not** raised to manufacture a split | §7.7 |
+| 2026-09-20 | Anomaly-reason labels are phrases, not column names, and `log_amount` renders in rupees | An alert reading "log_amount 7.82" is not an explanation. `reason_codes.yaml` carries a `label` (for "Unusual combination: X and Y") and a `template` per feature, plus one presentation-only `expm1` transform. The transform never touches a model input | §7.10 |
+| 2026-09-20 | `p_xgb` is computed as the logistic of the margin rather than by a second `predict_proba` call | The reasons come from `pred_contribs`, which sums to that same margin. Deriving both from one number makes the score and its explanation provably consistent, and the §9.6 re-score check compares to 1e-9 | §7.10, §9.6 |
+| 2026-09-20 | `make train` reads `w*` from `reports/experiments/lopo.json` instead of recomputing it | The weight in the artifact is then traceable to a recorded experiment rather than to a fit that happened during packaging, and `make train` stays an 8-second step. It fails with a clear message if the file is missing | §7.6, §0.4 |
+| 2026-09-20 | Only alert rows are explained | `pred_contribs` is the expensive part of scoring and §7.10 only ever shows reasons for REVIEW and HOLD rows. ALLOW rows get an empty list | §7.10 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---

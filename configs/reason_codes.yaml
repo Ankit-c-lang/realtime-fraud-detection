@@ -1,0 +1,153 @@
+# Feature -> analyst-readable text (PLAN §7.10).
+#
+# The model's own contributions decide WHICH features are named; this file only decides
+# how they read. That separation is what makes the explanation faithful: nothing here can
+# invent a reason the model did not actually use, and a template that disagreed with the
+# model would still be naming the feature the model ranked highest.
+#
+# Every one of the 36 features in src/fraud/features/spec.py needs an entry, because any
+# of them can land in a row's top three. A test asserts the two lists match exactly, so a
+# new feature cannot ship without text an analyst can read.
+#
+# - `label`    short noun phrase, used in the anomaly reason ("Unusual combination: X and Y")
+# - `template` the sentence shown on an alert, formatted with `value`
+# - `transform` optional, applied to the raw feature value before formatting
+#
+# Templates need not use {value}: a boolean flag reads better as a plain statement.
+
+transforms:
+  # log_amount is stored as log1p(amount), which is unreadable on an alert. expm1 puts
+  # it back into rupees. This is presentation only and never touches the model input.
+  expm1: "numpy.expm1"
+
+features:
+
+  # A. Context (PLAN §5.2 items 1-6)
+  log_amount:
+    label: "payment amount"
+    template: "Payment of ₹{value:,.0f}"
+    transform: expm1
+  hour_of_day:
+    label: "time of day"
+    template: "Payment at {value:.0f}:00"
+  is_night:
+    label: "overnight payment"
+    template: "Payment made overnight"
+  is_online:
+    label: "online payment"
+    template: "Card-not-present (online) payment"
+  is_international:
+    label: "international payment"
+    template: "Payment in a foreign country"
+  merchant_category:
+    label: "merchant category"
+    template: "Merchant category: {value}"
+
+  # B. Account velocity (items 7-14)
+  acct_cnt_5m:
+    label: "payments in 5 minutes"
+    template: "{value:.0f} payments in the previous 5 minutes"
+  acct_cnt_1h:
+    label: "payments in an hour"
+    template: "{value:.0f} payments in the previous hour"
+  acct_cnt_24h:
+    label: "payments in a day"
+    template: "{value:.0f} payments in the previous 24 hours"
+  acct_amt_24h:
+    label: "spend in a day"
+    template: "₹{value:,.0f} spent in the previous 24 hours"
+  acct_merchants_1h:
+    label: "merchants in an hour"
+    template: "{value:.0f} different merchants in the previous hour"
+  acct_declines_1h:
+    label: "declines in an hour"
+    template: "{value:.0f} declined payments in the previous hour"
+  acct_small_1h:
+    label: "small payments in an hour"
+    template: "{value:.0f} small-value payments in the previous hour"
+  secs_since_last:
+    label: "gap since the last payment"
+    template: "{value:,.0f} seconds since this account's previous payment"
+
+  # C. Behavioural deviation (items 15-19)
+  amount_zscore:
+    label: "amount vs this account's norm"
+    template: "Amount is {value:.1f} standard deviations from this account's usual"
+  amount_to_mean:
+    label: "amount vs this account's average"
+    template: "Amount is {value:.1f}x this account's average payment"
+  hour_unusualness:
+    label: "unusual hour for this account"
+    template: "Unusual hour for this account (unusualness {value:.2f})"
+  account_age_days:
+    label: "account age"
+    template: "Account is {value:.0f} days old"
+  acct_history_cnt:
+    label: "payment history"
+    template: "Account has {value:.0f} earlier payments on record"
+
+  # D. Novelty and location (items 20-25)
+  new_device:
+    label: "unseen device"
+    template: "First payment from this device"
+  acct_devices_30d:
+    label: "devices per account"
+    template: "{value:.0f} devices used by this account in 30 days"
+  new_merchant:
+    label: "unseen merchant"
+    template: "First payment at this merchant"
+  new_city:
+    label: "unseen city"
+    template: "First payment from this city"
+  km_from_home:
+    label: "distance from home"
+    template: "{value:,.0f} km from this account's home city"
+  geo_speed_kmh:
+    label: "implied travel speed"
+    template: "Implied travel speed of {value:,.0f} km/h since the last payment"
+
+  # E. Entity fan-out (items 26-30)
+  dev_accts_1h:
+    label: "accounts sharing the device in an hour"
+    template: "Device used by {value:.0f} accounts in the last hour"
+  dev_accts_30d:
+    label: "accounts sharing the device in 30 days"
+    template: "Device used by {value:.0f} accounts in 30 days"
+  ip_accts_1h:
+    label: "accounts sharing the IP in an hour"
+    template: "IP address used by {value:.0f} accounts in the last hour"
+  ip_accts_30d:
+    label: "accounts sharing the IP in 30 days"
+    template: "IP address used by {value:.0f} accounts in 30 days"
+  mer_accts_30d:
+    label: "accounts using the merchant"
+    template: "Merchant seen by {value:.0f} accounts in 30 days"
+
+  # F. Graph snapshot (items 31-36, PLAN §6)
+  graph_degree:
+    label: "linked accounts"
+    template: "Linked to {value:.0f} other accounts by a shared device or IP"
+  graph_clustering:
+    label: "density of the linked group"
+    template: "Linked accounts are densely interconnected (clustering {value:.2f})"
+  community_size:
+    label: "size of the linked cluster"
+    template: "Belongs to a linked cluster of {value:.0f} accounts"
+  community_shared_devices:
+    label: "devices shared in the cluster"
+    template: "{value:.0f} devices are shared inside this cluster"
+  community_young_share:
+    label: "young accounts in the cluster"
+    template: "{value:.0%} of linked accounts are under 30 days old"
+  ppr_risk:
+    label: "proximity to confirmed fraud"
+    template: "Closely linked to accounts with confirmed fraud"
+
+anomaly:
+  # Added when anomaly_pct crosses the threshold (PLAN §7.5, §7.10). The two features are
+  # whichever are furthest from their train medians, named with their labels above.
+  threshold: 0.99
+  template: "Unusual combination: {first} and {second} far outside typical values"
+
+# Top-N positive contributions shown per alert (PLAN §7.10).
+top_n: 3
