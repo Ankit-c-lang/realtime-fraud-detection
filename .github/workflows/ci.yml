@@ -13,7 +13,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v10
+      # setup-uv publishes no floating major tag past v7, so this is pinned exactly.
+      - uses: astral-sh/setup-uv@v10.1.0
         with:
           # One of the four places Python 3.12 is pinned (PLAN §15.3).
           python-version: "3.12"
