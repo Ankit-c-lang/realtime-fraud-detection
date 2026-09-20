@@ -59,6 +59,9 @@ graph:  ## Build graph snapshots and the point-in-time join (PLAN §6)
 experiments:  ## Run E1-E5 on the validation split (PLAN §7.9)
 	$(RUN) python -m fraud.modeling.experiments
 
+lopo:  ## Choose the blend weight by leave-one-pattern-out (PLAN §7.6)
+	$(RUN) python -m fraud.modeling.blend
+
 train:  ## Build the final model into models/<V> (PLAN §8)
 	@echo "not implemented yet: $@ — Phase 5, PLAN §8"; exit 1
 

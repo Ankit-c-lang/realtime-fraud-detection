@@ -53,3 +53,23 @@ xgboost:
     subsample: [0.7, 0.9]
     colsample_bytree: [0.6, 0.9]
     reg_lambda: [1, 5]
+
+iforest:
+  # PLAN §7.5, verbatim. Fitted on ALL train rows with the labels ignored, because a
+  # detector meant to complement the labelled model must not depend on those labels
+  # (leakage rule L6). The same fit is reused across every leave-one-pattern-out run,
+  # which is what keeps §7.6 a fair experiment.
+  n_estimators: 200
+  max_samples: 512
+  contamination: auto
+  random_state: 42
+  # Raw scores are mapped to percentiles through this many train quantiles. Min-max
+  # scaling is deliberately not used: one extreme score would squash every other one.
+  quantile_points: 1001
+
+blend:
+  # risk = w * p_xgb + (1 - w) * anomaly_pct (PLAN §7.6).
+  weight_grid: [1.0, 0.95, 0.9, 0.85, 0.8, 0.7, 0.6, 0.5]
+  # w* is chosen by leave-one-pattern-out: each pattern is withheld from training in
+  # turn, which simulates the unlabelled pattern the Isolation Forest exists to catch.
+  lopo_patterns: [VELOCITY, ATO, CARD_TESTING, RING]

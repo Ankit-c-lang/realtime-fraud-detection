@@ -4,35 +4,38 @@ Living status file. **Update it at the end of every completed task**, together w
 that task. Source of truth for *what* to build is `PLAN.md`; this file only tracks *where we are*.
 
 - **Plan version:** v1 (2026-09-16) · **Started:** 2026-09-20
-- **Current phase:** Phase 4 — Graph layer (PLAN §17, Phase 4) · Phases 0-3 complete · tags `phase-0`, `sim-v1`, `phase-2`, `sim-v2`, **`sim-v2-fix1`**
+- **Current phase:** Phase 5 — Isolation Forest, blend, explanations, artifacts (PLAN §17, Phase 5) · Phases 0-4 complete · tags `phase-0`, `sim-v1`, `phase-2`, `sim-v2`, **`sim-v2-fix1`**
 - **Phase 1 progress:** 8 / 8 ✅ — **simulator FROZEN, tagged `sim-v1`**
 - **Phase 2 progress:** 7 / 7 ✅ — tagged `phase-2`
 - **Phase 3 progress:** 6 / 6 ✅ (E3 ablation belongs to Phase 4)
-- **Overall:** 34 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Phase 4 progress:** 6 / 6 ✅
+- **Phase 5 progress:** 2 / 8
+- **Overall:** 36 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Phase 5 · Task 1 — `src/fraud/modeling/iforest.py` (PLAN §7.5, prompt P5.1).**
-Isolation Forest fitted on **train rows only**, label-free (leakage rule L6). Store the
-score quantiles and feature statistics so an online score maps to the same percentile the
-offline one did. Never fit on valid or test.
+**Phase 5 · Task 3 — `src/fraud/modeling/decisions.py` (PLAN §7.7, prompt P5.2).**
+The REVIEW threshold `t_r` (max F1 inside the 2% alert budget) and the HOLD threshold
+`t_h` (lowest threshold at precision ≥ 0.95 with ≥ 50 alerts), both chosen on **valid**.
+HOLD freezes a real customer's card, so if no threshold clears the bar HOLD is disabled
+and the README has to say so rather than lowering it.
 
-Then `blend.py`: the four `XGB_-k` models and the grid over `w`, with `w*` chosen by
-leave-one-pattern-out (§7.6), plus the fallback if `w*` collapses to 1.0.
+Then `scoring/reasons.py` + `configs/reason_codes.yaml` (all 36 features),
+`modeling/artifacts.py` (`models/v1` + `CURRENT`) and `scoring/risk_model.py`.
 
-Blocked on nothing. Phase 4 is complete: E3 and the ablation are in
-`reports/graph_ablation.md`.
+Blocked on nothing. P5.1 is done: `w* = 0.5` in `reports/experiments/lopo.json`, so the
+§7.6 fallback is **not** needed.
 
 ---
 
 ## Next up (in order)
 
-1. **P5.1** — `modeling/iforest.py` + `blend.py` with the LOPO weight (see *Currently working on*).
-2. **P4.2** — `graph/algorithms.py`: degree, clustering, seeded Louvain, community aggregates, personalised PageRank with the 14-day label delay.
-3. **P4.3** — `graph/snapshots.py` (89 daily snapshots, log the runtime; over ~10 min means switch to weekly) and `graph/join.py` (the two-step point-in-time join).
-4. **P4.4** — **E3** on 36 features with parameter set P unchanged, plus the ablation table.
+1. **P5.2** — `decisions.py`, `scoring/reasons.py` + `configs/reason_codes.yaml`, `modeling/artifacts.py`, `scoring/risk_model.py`; `make train V=v1` must write `models/v1` + `models/CURRENT`.
+2. **P5.2 tests** — `test_scoring.py`, `test_reason_codes.py` (contributions sum to the model margin within 1e-4).
+3. **P5.3** — `modeling/evaluate_test.py` (§7.11) and `scripts/export_results.py` → `reports/results.md` + the global contribution figure. **The user runs `make evaluate-test V=v1` themselves.**
+4. **E4 / E5** on valid, written to `reports/experiments/`.
 
 ---
 
@@ -104,6 +107,8 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-20 | 4 | Graph features take **50.1% of total importance**; `community_shared_devices` ranks **#1 of 36** | `reports/graph_ablation.md` |
 | 2026-09-20 | 4 | **Phase 4 complete** | 335 tests green |
 | 2026-09-20 | 1 | **SIMULATOR FROZEN — tagged `sim-v1`.** `configs/sim.yaml` sha256 `97404e57e5da143b1f1b47c11caac96d315ce5fe85da1f47feba5cda9976863f` matches the report and the run manifest | `git tag sim-v1`; CLAUDE.md invariant 11 |
+| 2026-09-20 | 5 | `modeling/iforest.py` — label-free Isolation Forest on all 213,215 train rows, 35 numeric features, 1,001-quantile percentile map, per-feature medians and spreads | `tests/test_iforest.py` 13 passed |
+| 2026-09-20 | 5 | `modeling/blend.py` + `make lopo` — four `XGB_-k` models, grid over `w`, `w*` by leave-one-pattern-out; **`w* = 0.5`**, so the Isolation Forest earns real weight and the §7.6 fallback is not needed | `reports/experiments/lopo.json`, `tests/test_blend.py` 17 passed |
 
 ---
 
@@ -162,9 +167,9 @@ before continuing — do not silently slip.
 - [x] 7. `test_graph_*`, `test_asof_join.py`
 - **Gate:** 89 snapshots < ~10 min (else weekly + document); E3 ring recall clearly above E2
 
-### Phase 5 — Isolation Forest, blend, explanations, artifacts (Day 8, ~8 h, 5/10) — IN PROGRESS
-- [ ] 1. `modeling/iforest.py` — fit on train only, label-free
-- [ ] 2. `modeling/blend.py` — four `XGB_-k` models, grid over `w`, pick `w*` (§7.6) + fallback
+### Phase 5 — Isolation Forest, blend, explanations, artifacts (Day 8, ~8 h, 5/10) — IN PROGRESS (2 / 8)
+- [x] 1. `modeling/iforest.py` — fit on train only, label-free ✅ 2026-09-20
+- [x] 2. `modeling/blend.py` — four `XGB_-k` models, grid over `w`, pick `w*` (§7.6); `w* = 0.5`, fallback not needed ✅ 2026-09-20
 - [ ] 3. `modeling/decisions.py` — REVIEW / HOLD thresholds on valid
 - [ ] 4. `scoring/reasons.py` + `configs/reason_codes.yaml` — top-3 reasons + anomaly reason
 - [ ] 5. `modeling/artifacts.py` — save/load `models/v1`, write `models/CURRENT`
@@ -293,6 +298,9 @@ again in either file.
 | 2026-09-20 | Caps set to `device_cap: 16`, `ip_cap: 18` — §6.1's own placeholders, kept after reviewing the measured distributions | §6.1 also suggests the 99.5th percentile, which on this data is **4** for devices. That would erase the rings the graph exists to find, since a ring puts 6-15 accounts on a device. 16 sits above rings (max 15) and sim-v2 shared devices (max 14) and below card-testing devices (p90 42). 18 keeps ring IPs (max 14) and drops carrier NAT (median 114), VPN (max 58) and offices (median 27) — §6.1 names big offices as something the cap *should* drop, since an office IP fuses colleagues into a ring-shaped cluster | §6.1 |
 | 2026-09-20 | `ppr_risk` is ~1e-5 rather than exactly 0 for accounts the seeds cannot reach | Power iteration starts from a uniform vector and stops at the default tolerance. Five orders of magnitude below seeded values, so it cannot move a tree split; forcing it to zero would cost iterations for nothing. Documented in `algorithms.py` and asserted as a ratio, not as zero | §6.3 |
 | 2026-09-20 | **The graph ablation shows no recall gain, and that is the reported result** | E2 already reaches ring recall 1.00, so E3 has no headroom. E3 matches E2 to 4 dp. The ablation instead reports two things it *can* establish: the graph features take 50.1% of importance with `community_shared_devices` ranked #1 of 36, and alone (E3b) they catch 100% of rings at 100% precision and 0% of every other pattern. The README will say the features are redundant on this dataset, not useless, and will not claim a delta the evidence does not support | §7.9 |
+| 2026-09-20 | **`w* = 0.5` sits at the edge of §7.6's grid and wins by ~2 transactions** | Mean LOPO recall: w=0.5 → 0.85553, w=0.7 → 0.85497, w=0.9 → 0.84424, w=1.0 → 0.73956. The curve is a noisy plateau from 0.9 down, and the margin between the top two is 0.00056 — about two rows across the four runs. `w*` is taken as the plan specifies (argmax, ties to the larger `w`); the grid was **not** extended past 0.5 to look for a better point, because that is tuning the plan rather than following it. The flatness is the honest caveat and belongs in the README | §7.6 |
+| 2026-09-20 | Anomaly-reason spread falls back to the standard deviation where the IQR is zero | §7.5 says "a small floor on the IQR". Most of these features are counts that are 0 for well over half of train, so their IQR is exactly 0 and a literal floor would make `\|x − median\| / IQR` enormous for any non-zero value — the sparsest feature would win every anomaly reason it appeared in. A zero IQR means the spread lives in the tails, so the standard deviation is used there; a genuinely constant column keeps a 1e-12 floor, where the numerator is 0 anyway | §7.5 |
+| 2026-09-20 | Isolation Forest and blend hyperparameters moved into `configs/model.yaml` (`iforest:`, `blend:`) | §7.5 and §7.6 give them as literals, but CLAUDE.md forbids hard-coded thresholds and §8 has to record them in the artifact metadata. Values are exactly the plan's | §7.5, §7.6 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---

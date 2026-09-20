@@ -1,0 +1,157 @@
+{
+  "best_weight": 0.5,
+  "detector": {
+    "feature_spec_version": "fs1",
+    "label_free": true,
+    "max_samples": 512,
+    "n_estimators": 200,
+    "n_features": 35,
+    "quantile_points": 1001,
+    "random_state": 42,
+    "train_rows": 213215
+  },
+  "e5_rows": [
+    {
+      "overall_precision": {
+        "alone": 0.975968,
+        "blended": 0.908791,
+        "delta": -0.067177
+      },
+      "overall_recall": {
+        "alone": 0.825056,
+        "blended": 0.933409
+      },
+      "pattern": "VELOCITY",
+      "pattern_recall": {
+        "alone": 0.049383,
+        "blended": 0.635802,
+        "delta": 0.58642
+      }
+    },
+    {
+      "overall_precision": {
+        "alone": 0.996198,
+        "blended": 0.939494,
+        "delta": -0.056704
+      },
+      "overall_recall": {
+        "alone": 0.887133,
+        "blended": 0.963883
+      },
+      "pattern": "ATO",
+      "pattern_recall": {
+        "alone": 0.091954,
+        "blended": 0.701149,
+        "delta": 0.609195
+      }
+    },
+    {
+      "overall_precision": {
+        "alone": 0.95,
+        "blended": 0.818482,
+        "delta": -0.131518
+      },
+      "overall_recall": {
+        "alone": 0.557562,
+        "blended": 0.839729
+      },
+      "pattern": "CARD_TESTING",
+      "pattern_recall": {
+        "alone": 0.005348,
+        "blended": 0.639037,
+        "delta": 0.63369
+      }
+    },
+    {
+      "overall_precision": {
+        "alone": 0.928463,
+        "blended": 0.933846,
+        "delta": 0.005383
+      },
+      "overall_recall": {
+        "alone": 0.688488,
+        "blended": 0.685102
+      },
+      "pattern": "RING",
+      "pattern_recall": {
+        "alone": 0.0,
+        "blended": 0.0,
+        "delta": 0.0
+      }
+    }
+  ],
+  "isolation_forest_helps": true,
+  "mean_recall_by_weight": {
+    "0.5": 0.85553,
+    "0.6": 0.849887,
+    "0.7": 0.854966,
+    "0.8": 0.829007,
+    "0.85": 0.840576,
+    "0.9": 0.844244,
+    "0.95": 0.759312,
+    "1": 0.73956
+  },
+  "protocol": "PLAN \u00a77.6. For each pattern k, XGB_-k is fitted on train rows excluding k (early stopping excludes k as well) and scored on the full valid split. R_k(w) is OVERALL recall at the budget-constrained threshold from \u00a77.7, recomputed for every (k, w). w* = argmax_w mean_k R_k(w), ties to the larger w. The Isolation Forest is fitted once on all train rows, label-free, and is identical in every run.",
+  "runs": [
+    {
+      "pattern": "VELOCITY",
+      "recall_by_weight": {
+        "0.5": 0.933409,
+        "0.6": 0.923251,
+        "0.7": 0.909707,
+        "0.8": 0.841986,
+        "0.85": 0.841986,
+        "0.9": 0.840858,
+        "0.95": 0.840858,
+        "1": 0.825056
+      },
+      "train_rows": 212870,
+      "withheld_rows": 345
+    },
+    {
+      "pattern": "ATO",
+      "recall_by_weight": {
+        "0.5": 0.963883,
+        "0.6": 0.961625,
+        "0.7": 0.958239,
+        "0.8": 0.957111,
+        "0.85": 0.955982,
+        "0.9": 0.954853,
+        "0.95": 0.953725,
+        "1": 0.887133
+      },
+      "train_rows": 212910,
+      "withheld_rows": 305
+    },
+    {
+      "pattern": "CARD_TESTING",
+      "recall_by_weight": {
+        "0.5": 0.839729,
+        "0.6": 0.829571,
+        "0.7": 0.866817,
+        "0.8": 0.832957,
+        "0.85": 0.879233,
+        "0.9": 0.897291,
+        "0.95": 0.557562,
+        "1": 0.557562
+      },
+      "train_rows": 212331,
+      "withheld_rows": 884
+    },
+    {
+      "pattern": "RING",
+      "recall_by_weight": {
+        "0.5": 0.685102,
+        "0.6": 0.685102,
+        "0.7": 0.685102,
+        "0.8": 0.683973,
+        "0.85": 0.685102,
+        "0.9": 0.683973,
+        "0.95": 0.685102,
+        "1": 0.688488
+      },
+      "train_rows": 210755,
+      "withheld_rows": 2460
+    }
+  ]
+}
