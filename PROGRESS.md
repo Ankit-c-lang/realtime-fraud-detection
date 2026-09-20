@@ -7,32 +7,32 @@ that task. Source of truth for *what* to build is `PLAN.md`; this file only trac
 - **Current phase:** Phase 3 — Splits, baselines, XGBoost (PLAN §17, Phase 3) · Phases 0-2 complete, tagged `phase-0`, `sim-v1`, `phase-2`
 - **Phase 1 progress:** 8 / 8 ✅ — **simulator FROZEN, tagged `sim-v1`**
 - **Phase 2 progress:** 7 / 7 ✅ — tagged `phase-2`
-- **Overall:** 21 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Phase 3 progress:** 2 / 6 tasks
+- **Overall:** 23 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Phase 3 · Task 1 — `src/fraud/modeling/splits.py` (PLAN §4.7, §7.11, prompt P3.1).**
-The ONLY loader of split data. Reads `configs/splits.yaml`, drops burn-in rows, and
-guards the test split behind `ALLOW_TEST=1` so it cannot be read by accident (invariant 6,
-leakage rules L5 and L10).
+**Phase 3 · Task 3 — `src/fraud/modeling/rules.py` (PLAN §7.3, prompt P3.2).**
+The R1-R4 rules baseline, evaluated on **valid** as experiment **E1**. Thresholds are
+already in `configs/model.yaml`: R1 velocity (`acct_cnt_5m >= 5`), R2 card testing
+(`acct_small_1h >= 4` and `acct_declines_1h >= 3`), R3 ATO (`geo_speed_kmh > 900` and
+`new_device`), R4 fan-out (`dev_accts_1h >= 5`).
 
-Then `metrics.py` (PR-AUC, capacity-constrained operating point, HOLD threshold search,
-per-pattern recall, value detection rate, false-positive rate, alert rate).
+This is the reference point XGBoost has to beat. A weak baseline makes any model look
+good, which is why §7.3 replaced "XGBoost on raw columns" with real rules.
 
-**🚩 Phase 3 carries the first hard checkpoint: E2 on valid must exist by end of Day 5.**
-
-Blocked on nothing. `data/features/hot_features.parquet` is built and validated.
+Blocked on nothing.
 
 ---
 
 ## Next up (in order)
 
-1. **P3.1** — `modeling/splits.py` + `metrics.py` + `tests/test_splits.py` and `tests/test_metrics.py` (see *Currently working on*).
-2. **P3.2** — `modeling/rules.py`: the R1-R4 baseline, experiment **E1** on valid.
-3. **P3.3** — `modeling/train_xgb.py`: 20-config random search on the 30 hot features, fit on train, early-stop on `early_stop`, select on valid -> **E2**. Save parameter set P.
-4. **P3.4** — `modeling/experiments.py` writing `reports/experiments/E*.json`. **E2 must beat E1** on PR-AUC and recall at budget; if it does not, investigate before moving on.
+1. **P3.2** — `modeling/rules.py` + `tests/test_rules.py`, experiment **E1** on valid (see *Currently working on*).
+2. **P3.3** — `modeling/train_xgb.py`: 20-config random search on the 30 hot features, fit on train, early-stop on `early_stop`, select on valid -> **E2**. Save parameter set P.
+3. **P3.4** — `modeling/experiments.py` writing `reports/experiments/E*.json`, and `make experiments`.
+4. **🚩 CHECKPOINT: E2 must beat E1** on PR-AUC and recall at budget. If validation PR-AUC exceeds 0.995 that triggers the one-time `sim-v2` rule (§4.8) — report it, do not act on it.
 
 ---
 
@@ -83,6 +83,8 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-20 | 2 | P2.3: `features/replay.py` + `make features`; `hot_features.parquet` (494,156 rows, 0 NaN) and `checkpoint_2026-03-14.json.gz` (21,552 accounts, 4.6 MB) | `tests/test_replay.py` (14) + `test_state_serialization.py` (10); replay **81.5 s**, 6,060 events/s |
 | 2026-09-20 | 2 | `reports/feature_report.md` committed | `make features` |
 | 2026-09-20 | 2 | **Phase 2 complete — tagged `phase-2`** | 227 fast / 235 full tests green |
+| 2026-09-20 | 3 | `modeling/splits.py` (the only split loader, `ALLOW_TEST` lock) + `configs/model.yaml` | `tests/test_splits.py`, 14 tests; train 213,470 / early_stop 38,580 / valid 66,558 rows |
+| 2026-09-20 | 3 | `modeling/metrics.py`: PR-AUC, budget-constrained operating point, HOLD threshold, per-pattern recall, value detection rate | `tests/test_metrics.py`, 19 tests |
 | 2026-09-20 | 1 | **SIMULATOR FROZEN — tagged `sim-v1`.** `configs/sim.yaml` sha256 `97404e57e5da143b1f1b47c11caac96d315ce5fe85da1f47feba5cda9976863f` matches the report and the run manifest | `git tag sim-v1`; CLAUDE.md invariant 11 |
 
 ---
@@ -124,8 +126,8 @@ before continuing — do not silently slip.
 - **Gate:** `make features` < ~3 min, no NaNs, row count == event count, checkpoint round-trips
 
 ### Phase 3 — Splits, baselines, XGBoost (Day 5 → Day 6 am, ~8 h, 4/10) — IN PROGRESS
-- [ ] 1. `modeling/splits.py` (burn-in excluded, test behind `ALLOW_TEST`)
-- [ ] 2. `modeling/metrics.py` (PR-AUC, capacity operating point, per-pattern recall, VDR, FPR)
+- [x] 1. `modeling/splits.py` (burn-in excluded, test behind `ALLOW_TEST`)
+- [x] 2. `modeling/metrics.py` (PR-AUC, capacity operating point, per-pattern recall, VDR, FPR)
 - [ ] 3. `modeling/rules.py` — R1-R4 → **E1**
 - [ ] 4. `modeling/train_xgb.py` — 20-config random search on hot features → **E2**, save param set P
 - [ ] 5. `modeling/experiments.py` — writes `reports/experiments/E*.json`
@@ -262,6 +264,8 @@ again in either file.
 | 2026-09-20 | Timestamps convert via a fixed naive epoch, never `datetime.timestamp()` | `.timestamp()` reads a naive value in the machine's local zone, so identical input would give different state on another machine and the replay would stop being reproducible | §5.1 |
 | 2026-09-20 | Test helpers live in `tests/feature_helpers.py`, imported directly rather than as `tests.*` | `tests/` is not a package, and putting the builders in `conftest.py` would have broken collection for the whole suite while the feature modules did not exist | §13 |
 | 2026-09-20 | The replay peaks at **2.1 GB RSS** on the full dataset | It accumulates one dict per event before building the frame. Comfortable on a 7.7 GB VM but the largest memory user so far. If Phase 4's graph work pushes the total, stream the output in batches instead | §5.5 |
+| 2026-09-20 | The split guard is `allow_test_enabled()` and the exception is `SplitLockedError`, not `test_*` / `Test*` | pytest collects anything so named as a test case or class and warns. A guard that silently becomes a test is a guard nobody is checking | §7.11 |
+| 2026-09-20 | `configs/model.yaml` created (alert budget, HOLD bar, rule thresholds) | Listed in §16; holds the §7.7 decision-policy values. Like `features.yaml` it governs modelling rather than the data, so it sits outside the sim-v1 freeze | §7.3, §7.7, §16 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---
