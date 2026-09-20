@@ -1,0 +1,22 @@
+# Modelling configuration (PLAN §7).
+#
+# Not covered by the sim-v1 freeze: this is how models are fitted and judged, not what
+# the data is.
+
+# Analyst capacity. Alerts may be at most this share of transactions (PLAN §7.7).
+# Everything at the operating point is chosen subject to this, which is why the headline
+# metric is recall within budget rather than accuracy.
+review_budget: 0.02
+
+hold:
+  # HOLD freezes a genuine customer's card, so it is reserved for high precision.
+  min_precision: 0.95
+  # Below this many alerts the precision estimate is noise, and HOLD is disabled.
+  min_alerts: 50
+
+rules:
+  # R1-R4, the reference point ML has to beat (PLAN §7.3).
+  r1_velocity: {acct_cnt_5m: 5}
+  r2_card_testing: {acct_small_1h: 4, acct_declines_1h: 3}
+  r3_ato: {geo_speed_kmh: 900.0, new_device: 1}
+  r4_fanout: {dev_accts_1h: 5}
