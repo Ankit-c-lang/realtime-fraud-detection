@@ -50,7 +50,7 @@ data:  ## Generate the simulated dataset and its report (PLAN §4)
 	$(RUN) python -m fraud.sim.checks
 
 features:  ## Offline replay to hot_features.parquet plus the checkpoint (PLAN §5)
-	@echo "not implemented yet: $@ — Phase 2, PLAN §5"; exit 1
+	$(RUN) python -m fraud.features.replay
 
 graph:  ## Build graph snapshots and the point-in-time join (PLAN §6)
 	@echo "not implemented yet: $@ — Phase 4, PLAN §6"; exit 1

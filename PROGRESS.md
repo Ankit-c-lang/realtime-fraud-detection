@@ -4,34 +4,35 @@ Living status file. **Update it at the end of every completed task**, together w
 that task. Source of truth for *what* to build is `PLAN.md`; this file only tracks *where we are*.
 
 - **Plan version:** v1 (2026-09-16) · **Started:** 2026-09-20
-- **Current phase:** Phase 2 — Feature engine (PLAN §17, Phase 2) · Phases 0-1 complete, tagged `phase-0`, `sim-v1`
+- **Current phase:** Phase 3 — Splits, baselines, XGBoost (PLAN §17, Phase 3) · Phases 0-2 complete, tagged `phase-0`, `sim-v1`, `phase-2`
 - **Phase 1 progress:** 8 / 8 ✅ — **simulator FROZEN, tagged `sim-v1`**
-- **Phase 2 progress:** 5 / 7 tasks
-- **Overall:** 19 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Phase 2 progress:** 7 / 7 ✅ — tagged `phase-2`
+- **Overall:** 21 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Phase 2 · Task 6 — `src/fraud/features/replay.py` (PLAN §5.5, prompt P2.3).**
-Replay the frozen dataset through `FeatureEngine` + `InMemoryStore` in event order and
-write `data/features/hot_features.parquet` with a split tag from `configs/splits.yaml`, a
-burn-in flag and `FEATURE_SPEC_VERSION`. Take the state checkpoint at `test_start`
-(2026-03-14) to `data/state/checkpoint_2026-03-14.json.gz` so the live replay starts warm
-(§9.5).
+**Phase 3 · Task 1 — `src/fraud/modeling/splits.py` (PLAN §4.7, §7.11, prompt P3.1).**
+The ONLY loader of split data. Reads `configs/splits.yaml`, drops burn-in rows, and
+guards the test split behind `ALLOW_TEST=1` so it cannot be read by accident (invariant 6,
+leakage rules L5 and L10).
 
-Then `tests/test_replay.py` and `tests/test_state_serialization.py`, wire `make features`,
-run it on the full data, report the runtime and write `reports/feature_report.md`.
+Then `metrics.py` (PR-AUC, capacity-constrained operating point, HOLD threshold search,
+per-pattern recall, value detection rate, false-positive rate, alert rate).
 
-Blocked on nothing.
+**🚩 Phase 3 carries the first hard checkpoint: E2 on valid must exist by end of Day 5.**
+
+Blocked on nothing. `data/features/hot_features.parquet` is built and validated.
 
 ---
 
 ## Next up (in order)
 
-1. **P2.3** — `features/replay.py` + `make features` + `reports/feature_report.md` (see *Currently working on*).
-2. `tests/test_replay.py` (row count equals event count, no NaN, checkpoint at the boundary) and `tests/test_state_serialization.py` (byte-stable round trip).
-3. Close Phase 2, tag `phase-2`, then **Phase 3** — `modeling/splits.py`, `metrics.py`, `rules.py` (E1), `train_xgb.py` (E2). **Checkpoint: E2 on valid must exist by end of Day 5.**
+1. **P3.1** — `modeling/splits.py` + `metrics.py` + `tests/test_splits.py` and `tests/test_metrics.py` (see *Currently working on*).
+2. **P3.2** — `modeling/rules.py`: the R1-R4 baseline, experiment **E1** on valid.
+3. **P3.3** — `modeling/train_xgb.py`: 20-config random search on the 30 hot features, fit on train, early-stop on `early_stop`, select on valid -> **E2**. Save parameter set P.
+4. **P3.4** — `modeling/experiments.py` writing `reports/experiments/E*.json`. **E2 must beat E1** on PR-AUC and recall at budget; if it does not, investigate before moving on.
 
 ---
 
@@ -79,6 +80,9 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-20 | 1 | `reports/sim_report.md` committed: **26/26 pass**, config sha256 `97404e57…` | `make data` |
 | 2026-09-20 | 2 | P2.1 (tests first): `test_features_windows.py` + `test_features_geo.py`, 46 hand-computed tests written before any implementation | commit `fed3e52` |
 | 2026-09-20 | 2 | P2.2: `schemas.py`, `features/spec.py` (30 hot + 6 warm, `fs1`), `state.py`, `accounts.py`, `engine.py`, `store_memory.py`, `configs/features.yaml` | **all 46 P2.1 tests pass, no expected value changed**; 203 fast / 211 full |
+| 2026-09-20 | 2 | P2.3: `features/replay.py` + `make features`; `hot_features.parquet` (494,156 rows, 0 NaN) and `checkpoint_2026-03-14.json.gz` (21,552 accounts, 4.6 MB) | `tests/test_replay.py` (14) + `test_state_serialization.py` (10); replay **81.5 s**, 6,060 events/s |
+| 2026-09-20 | 2 | `reports/feature_report.md` committed | `make features` |
+| 2026-09-20 | 2 | **Phase 2 complete — tagged `phase-2`** | 227 fast / 235 full tests green |
 | 2026-09-20 | 1 | **SIMULATOR FROZEN — tagged `sim-v1`.** `configs/sim.yaml` sha256 `97404e57e5da143b1f1b47c11caac96d315ce5fe85da1f47feba5cda9976863f` matches the report and the run manifest | `git tag sim-v1`; CLAUDE.md invariant 11 |
 
 ---
@@ -109,17 +113,17 @@ before continuing — do not silently slip.
 - [x] 8. **Freeze** `sim.yaml` (hash in report), commit, tag `sim-v1`
 - **Gate:** ~500K events, 1.2-1.8% fraud, ≥12 rings start in test window (≥4 reusing a device), same seed → same hashes
 
-### Phase 2 — Feature engine and offline replay (Day 3 pm → Day 5 am, ~14 h, 6/10) — IN PROGRESS
+### Phase 2 — Feature engine and offline replay (Day 3 pm → Day 5 am, ~14 h, 6/10) — ✅ COMPLETE (2026-09-20), tagged `phase-2`
 - [x] 1. `features/spec.py` — `FEATURE_NAMES`, defaults, `FEATURE_SPEC_VERSION = "fs1"`
 - [x] 2. `features/state.py` — `AccountState` with exact JSON round trip
 - [x] 3. `features/accounts.py` — `AccountDirectory`
 - [x] 4. `features/engine.py` — `compute_features()`, `update_account()`, `FeatureEngine.process()`
 - [x] 5. `features/store_memory.py` — blobs + windowed entity indexes
-- [ ] 6. `features/replay.py` — `hot_features.parquet` + checkpoint at `test_start`
-- [ ] 7. `test_features_*`, `test_state_serialization.py`, `test_replay.py` (hand-computed values)
+- [x] 6. `features/replay.py` — `hot_features.parquet` + checkpoint at `test_start`
+- [x] 7. `test_features_*`, `test_state_serialization.py`, `test_replay.py` (hand-computed values)
 - **Gate:** `make features` < ~3 min, no NaNs, row count == event count, checkpoint round-trips
 
-### Phase 3 — Splits, baselines, XGBoost (Day 5 → Day 6 am, ~8 h, 4/10)
+### Phase 3 — Splits, baselines, XGBoost (Day 5 → Day 6 am, ~8 h, 4/10) — IN PROGRESS
 - [ ] 1. `modeling/splits.py` (burn-in excluded, test behind `ALLOW_TEST`)
 - [ ] 2. `modeling/metrics.py` (PR-AUC, capacity operating point, per-pattern recall, VDR, FPR)
 - [ ] 3. `modeling/rules.py` — R1-R4 → **E1**
@@ -257,6 +261,7 @@ again in either file.
 | 2026-09-20 | `TransactionEvent` is a frozen dataclass, not a Pydantic model | The replay builds one per event across ~494k events, where validation costs more than it buys on data from our own generator. The API validates with Pydantic before constructing one (§10) | §3.5, §10 |
 | 2026-09-20 | Timestamps convert via a fixed naive epoch, never `datetime.timestamp()` | `.timestamp()` reads a naive value in the machine's local zone, so identical input would give different state on another machine and the replay would stop being reproducible | §5.1 |
 | 2026-09-20 | Test helpers live in `tests/feature_helpers.py`, imported directly rather than as `tests.*` | `tests/` is not a package, and putting the builders in `conftest.py` would have broken collection for the whole suite while the feature modules did not exist | §13 |
+| 2026-09-20 | The replay peaks at **2.1 GB RSS** on the full dataset | It accumulates one dict per event before building the frame. Comfortable on a 7.7 GB VM but the largest memory user so far. If Phase 4's graph work pushes the total, stream the output in batches instead | §5.5 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---
