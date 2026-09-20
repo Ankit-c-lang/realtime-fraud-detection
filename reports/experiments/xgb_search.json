@@ -1,0 +1,279 @@
+{
+  "best": {
+    "best_iteration": 98,
+    "params": {
+      "colsample_bytree": 0.6,
+      "learning_rate": 0.1,
+      "max_depth": 8,
+      "min_child_weight": 1,
+      "reg_lambda": 5,
+      "subsample": 0.9
+    },
+    "seconds": 2.7,
+    "valid_pr_auc": 0.9994706333658763
+  },
+  "n_trials": 20,
+  "total_seconds": 88.7,
+  "trials": [
+    {
+      "best_iteration": 284,
+      "params": {
+        "colsample_bytree": 0.6,
+        "learning_rate": 0.1,
+        "max_depth": 4,
+        "min_child_weight": 5,
+        "reg_lambda": 5,
+        "subsample": 0.7
+      },
+      "seconds": 3.0,
+      "valid_pr_auc": 0.9991512902187225
+    },
+    {
+      "best_iteration": 271,
+      "params": {
+        "colsample_bytree": 0.9,
+        "learning_rate": 0.1,
+        "max_depth": 4,
+        "min_child_weight": 1,
+        "reg_lambda": 5,
+        "subsample": 0.7
+      },
+      "seconds": 2.8,
+      "valid_pr_auc": 0.9987611828936539
+    },
+    {
+      "best_iteration": 241,
+      "params": {
+        "colsample_bytree": 0.9,
+        "learning_rate": 0.1,
+        "max_depth": 8,
+        "min_child_weight": 10,
+        "reg_lambda": 1,
+        "subsample": 0.9
+      },
+      "seconds": 2.9,
+      "valid_pr_auc": 0.9987264116833242
+    },
+    {
+      "best_iteration": 307,
+      "params": {
+        "colsample_bytree": 0.6,
+        "learning_rate": 0.05,
+        "max_depth": 8,
+        "min_child_weight": 5,
+        "reg_lambda": 5,
+        "subsample": 0.7
+      },
+      "seconds": 3.9,
+      "valid_pr_auc": 0.9991300300507645
+    },
+    {
+      "best_iteration": 242,
+      "params": {
+        "colsample_bytree": 0.9,
+        "learning_rate": 0.05,
+        "max_depth": 8,
+        "min_child_weight": 5,
+        "reg_lambda": 1,
+        "subsample": 0.9
+      },
+      "seconds": 3.1,
+      "valid_pr_auc": 0.9986496344598654
+    },
+    {
+      "best_iteration": 360,
+      "params": {
+        "colsample_bytree": 0.9,
+        "learning_rate": 0.03,
+        "max_depth": 6,
+        "min_child_weight": 1,
+        "reg_lambda": 1,
+        "subsample": 0.9
+      },
+      "seconds": 6.0,
+      "valid_pr_auc": 0.998331193905446
+    },
+    {
+      "best_iteration": 98,
+      "params": {
+        "colsample_bytree": 0.6,
+        "learning_rate": 0.1,
+        "max_depth": 8,
+        "min_child_weight": 1,
+        "reg_lambda": 5,
+        "subsample": 0.9
+      },
+      "seconds": 2.7,
+      "valid_pr_auc": 0.9994706333658763
+    },
+    {
+      "best_iteration": 258,
+      "params": {
+        "colsample_bytree": 0.6,
+        "learning_rate": 0.05,
+        "max_depth": 8,
+        "min_child_weight": 1,
+        "reg_lambda": 5,
+        "subsample": 0.9
+      },
+      "seconds": 5.0,
+      "valid_pr_auc": 0.9994045704457709
+    },
+    {
+      "best_iteration": 361,
+      "params": {
+        "colsample_bytree": 0.6,
+        "learning_rate": 0.1,
+        "max_depth": 8,
+        "min_child_weight": 10,
+        "reg_lambda": 1,
+        "subsample": 0.7
+      },
+      "seconds": 5.8,
+      "valid_pr_auc": 0.9993390399609559
+    },
+    {
+      "best_iteration": 681,
+      "params": {
+        "colsample_bytree": 0.9,
+        "learning_rate": 0.03,
+        "max_depth": 6,
+        "min_child_weight": 5,
+        "reg_lambda": 5,
+        "subsample": 0.7
+      },
+      "seconds": 9.2,
+      "valid_pr_auc": 0.9987871914816641
+    },
+    {
+      "best_iteration": 101,
+      "params": {
+        "colsample_bytree": 0.6,
+        "learning_rate": 0.1,
+        "max_depth": 8,
+        "min_child_weight": 5,
+        "reg_lambda": 1,
+        "subsample": 0.9
+      },
+      "seconds": 2.6,
+      "valid_pr_auc": 0.9993747103034322
+    },
+    {
+      "best_iteration": 142,
+      "params": {
+        "colsample_bytree": 0.9,
+        "learning_rate": 0.05,
+        "max_depth": 8,
+        "min_child_weight": 1,
+        "reg_lambda": 1,
+        "subsample": 0.7
+      },
+      "seconds": 3.1,
+      "valid_pr_auc": 0.9978966118379058
+    },
+    {
+      "best_iteration": 708,
+      "params": {
+        "colsample_bytree": 0.6,
+        "learning_rate": 0.03,
+        "max_depth": 6,
+        "min_child_weight": 10,
+        "reg_lambda": 1,
+        "subsample": 0.7
+      },
+      "seconds": 9.2,
+      "valid_pr_auc": 0.999119389576374
+    },
+    {
+      "best_iteration": 240,
+      "params": {
+        "colsample_bytree": 0.6,
+        "learning_rate": 0.1,
+        "max_depth": 6,
+        "min_child_weight": 10,
+        "reg_lambda": 5,
+        "subsample": 0.7
+      },
+      "seconds": 4.2,
+      "valid_pr_auc": 0.9991374813522872
+    },
+    {
+      "best_iteration": 115,
+      "params": {
+        "colsample_bytree": 0.9,
+        "learning_rate": 0.1,
+        "max_depth": 6,
+        "min_child_weight": 1,
+        "reg_lambda": 5,
+        "subsample": 0.7
+      },
+      "seconds": 3.1,
+      "valid_pr_auc": 0.9988283787327958
+    },
+    {
+      "best_iteration": 210,
+      "params": {
+        "colsample_bytree": 0.9,
+        "learning_rate": 0.1,
+        "max_depth": 6,
+        "min_child_weight": 10,
+        "reg_lambda": 1,
+        "subsample": 0.7
+      },
+      "seconds": 3.6,
+      "valid_pr_auc": 0.9989485229313484
+    },
+    {
+      "best_iteration": 150,
+      "params": {
+        "colsample_bytree": 0.9,
+        "learning_rate": 0.1,
+        "max_depth": 4,
+        "min_child_weight": 5,
+        "reg_lambda": 1,
+        "subsample": 0.7
+      },
+      "seconds": 3.0,
+      "valid_pr_auc": 0.998551105467594
+    },
+    {
+      "best_iteration": 663,
+      "params": {
+        "colsample_bytree": 0.9,
+        "learning_rate": 0.03,
+        "max_depth": 8,
+        "min_child_weight": 10,
+        "reg_lambda": 5,
+        "subsample": 0.9
+      },
+      "seconds": 9.0,
+      "valid_pr_auc": 0.9989046938826681
+    },
+    {
+      "best_iteration": 168,
+      "params": {
+        "colsample_bytree": 0.9,
+        "learning_rate": 0.1,
+        "max_depth": 6,
+        "min_child_weight": 1,
+        "reg_lambda": 1,
+        "subsample": 0.9
+      },
+      "seconds": 3.4,
+      "valid_pr_auc": 0.9990874422888574
+    },
+    {
+      "best_iteration": 120,
+      "params": {
+        "colsample_bytree": 0.6,
+        "learning_rate": 0.05,
+        "max_depth": 6,
+        "min_child_weight": 1,
+        "reg_lambda": 1,
+        "subsample": 0.7
+      },
+      "seconds": 3.0,
+      "valid_pr_auc": 0.999206875326428
+    }
+  ]
+}

@@ -30,3 +30,26 @@ rules:
   r4_ring:
     dev_accts_30d: 3
     account_age_days: 30
+
+xgboost:
+  # PLAN §7.4. No scale_pos_weight: the probability gets blended with an anomaly
+  # percentile later, and reweighting would distort it and make the blend weight
+  # meaningless (§3.8).
+  fixed:
+    objective: binary:logistic
+    tree_method: hist
+    enable_categorical: true
+    eval_metric: aucpr
+    n_estimators: 2000
+    early_stopping_rounds: 100
+    random_state: 42
+  # 20 configurations sampled from this grid, seeded so the search is reproducible.
+  search_trials: 20
+  search_seed: 42
+  grid:
+    max_depth: [4, 6, 8]
+    learning_rate: [0.03, 0.05, 0.1]
+    min_child_weight: [1, 5, 10]
+    subsample: [0.7, 0.9]
+    colsample_bytree: [0.6, 0.9]
+    reg_lambda: [1, 5]

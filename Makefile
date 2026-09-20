@@ -56,7 +56,7 @@ graph:  ## Build graph snapshots and the point-in-time join (PLAN §6)
 	@echo "not implemented yet: $@ — Phase 4, PLAN §6"; exit 1
 
 experiments:  ## Run E1-E5 on the validation split (PLAN §7.9)
-	@echo "not implemented yet: $@ — Phase 3, PLAN §7.9"; exit 1
+	$(RUN) python -m fraud.modeling.experiments
 
 train:  ## Build the final model into models/<V> (PLAN §8)
 	@echo "not implemented yet: $@ — Phase 5, PLAN §8"; exit 1

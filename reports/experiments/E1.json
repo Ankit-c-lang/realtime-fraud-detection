@@ -28,8 +28,8 @@
   },
   "experiment_id": "E1",
   "feature_spec_version": "fs1",
-  "generated_at": "2026-09-20T13:08:33+00:00",
-  "git_commit": "3194bc5",
+  "generated_at": "2026-09-20T13:21:29+00:00",
+  "git_commit": "ae54c05",
   "metrics": {
     "alert_rate": 0.010396947023648547,
     "alerts": 692,
