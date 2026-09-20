@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import csv
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Final
 
 import numpy as np
@@ -72,6 +72,10 @@ class Population:
     ips: pd.DataFrame
     account_ips: pd.DataFrame
     regular_merchants: pd.DataFrame
+    # sim-v2: one unused handset per account, picked up only when legit.py decides a
+    # trip or a VPN session happens on a different machine. Deliberately NOT in
+    # account_devices, so it stays new to the account until first used.
+    spare_devices: pd.DataFrame = field(default_factory=pd.DataFrame)
 
     def fingerprint(self) -> str:
         """Stable hash of every table, used to prove two runs agree (PLAN §4.8)."""
@@ -84,6 +88,7 @@ class Population:
             self.ips,
             self.account_ips,
             self.regular_merchants,
+            self.spare_devices,
         ):
             digest.update(
                 pd.util.hash_pandas_object(
@@ -123,7 +128,7 @@ def build_population(config: dict[str, Any], categories: list[dict[str, Any]]) -
         rngs["population_merchants"], config, categories, cities, start, end
     )
     regulars = _build_regular_merchants(rngs["population_regulars"], config, accounts, merchants)
-    devices, account_devices = _build_devices(
+    devices, account_devices, spares = _build_devices(
         rngs["population_devices"], config, accounts, start, end
     )
     ips, account_ips = _build_ips(rngs["population_ips"], config, accounts, cities)
@@ -136,6 +141,7 @@ def build_population(config: dict[str, Any], categories: list[dict[str, Any]]) -
         ips=ips,
         account_ips=account_ips,
         regular_merchants=regulars,
+        spare_devices=spares,
     )
 
 
@@ -417,8 +423,8 @@ def _build_devices(
     accounts: pd.DataFrame,
     start: pd.Timestamp,
     end: pd.Timestamp,
-) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Personal devices, household devices and mid-simulation phone upgrades.
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Personal devices, household devices, widely shared devices and upgrades.
 
     A device is valid over a window, so an upgrade is just two non-overlapping
     windows rather than a special case downstream.
@@ -490,9 +496,83 @@ def _build_devices(
     )
     links.extend(household)
 
+    # sim-v2: legitimate accounts sharing one device with many others, which is the
+    # band a fraud ring lives in. Family members are excluded so no account carries
+    # two shared-device weightings.
+    links.extend(
+        _build_shared_devices(
+            rng, spec, accounts, family_members, start, end, next_device, registry, links
+        )
+    )
+
+    spares = [
+        {"account_id": account_ids[row], "device_id": next_device("spare")[0]} for row in range(n)
+    ]
+
     devices = pd.DataFrame(registry, columns=["device_id", "device_type"])
     accounts["family_id"] = family_members.to_numpy()
-    return devices, pd.DataFrame(links)
+    return devices, pd.DataFrame(links), pd.DataFrame(spares)
+
+
+def _build_shared_devices(
+    rng: np.random.Generator,
+    spec: dict[str, Any],
+    accounts: pd.DataFrame,
+    family_members: pd.Series,
+    start: pd.Timestamp,
+    end: pd.Timestamp,
+    next_device: Any,
+    registry: list[tuple[str, str]],
+    links: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Devices shared by 5-15 unrelated accounts (PLAN §4.8 sim-v2 revision).
+
+    Before this existed no legitimate account shared a device with five others, so
+    ``dev_accts_30d`` nearly identified a ring by itself and the graph layer had
+    nothing left to demonstrate. See reports/sim_realism_review.md.
+    """
+    n = len(accounts)
+    account_ids = accounts["account_id"].to_numpy()
+    share = float(spec.get("shared_device_share", 0.0))
+    if share <= 0.0:
+        return []
+
+    eligible = np.flatnonzero(family_members.isna().to_numpy())
+    wanted = min(round(n * share), len(eligible))
+    pool = list(rng.permutation(eligible)[:wanted])
+
+    low = int(spec["shared_group_min"])
+    high = int(spec["shared_group_max"])
+    weight = float(spec["shared_device_usage_share"])
+    created = accounts["created_at"].to_numpy().astype("datetime64[s]")
+    floor = np.maximum(created, np.datetime64(start.to_datetime64(), "s"))
+    stop = np.datetime64(end.to_datetime64(), "s")
+
+    by_account: dict[str, list[dict[str, Any]]] = {}
+    for link in links:
+        by_account.setdefault(link["account_id"], []).append(link)
+
+    extra: list[dict[str, Any]] = []
+    while len(pool) >= low:
+        size = int(rng.integers(low, min(high, len(pool)) + 1))
+        members = [pool.pop() for _ in range(size)]
+        device_id, kind = next_device("shared")
+        registry.append((device_id, kind))
+
+        for row in members:
+            # Scale the account's own devices down so its weights still total 1.
+            for link in by_account.get(account_ids[row], []):
+                link["weight"] *= 1.0 - weight
+            extra.append(
+                {
+                    "account_id": account_ids[row],
+                    "device_id": device_id,
+                    "valid_from": floor[row],
+                    "valid_to": stop,
+                    "weight": weight,
+                }
+            )
+    return extra
 
 
 def _assign_families(

@@ -62,6 +62,13 @@ devices:
   family_size_max: 4
   family_device_share: 0.40
 
+  # --- sim-v2 (PLAN §4.8 one-time revision, 2026-09-20) --------------------
+  # See reports/sim_realism_review.md and the notes in sim.yaml.
+  shared_device_share: 0.04
+  shared_group_min: 5
+  shared_group_max: 15
+  shared_device_usage_share: 0.35
+
 ip_pools:
   carrier_nat:
     n_ips: 8
@@ -85,6 +92,7 @@ ip_pools:
     n_ips: 3
     account_share: 0.02
     usage_share: 0.10
+    new_device_share: 0.25
 
 legit:
   weekday_factor: [1.00, 0.98, 1.00, 1.05, 1.20, 1.30, 1.10]
@@ -109,6 +117,7 @@ hard_negatives:
     domestic_share: 0.75
     min_gap_hours_domestic: 2.0
     min_gap_hours_international: 6.0
+    new_device_share: 0.30
   shopping_spree:
     account_day_share: 0.02
     extra_txns_min: 4
@@ -116,6 +125,8 @@ hard_negatives:
     window_minutes: 90
     merchants_min: 2
     merchants_max: 5
+    tight_share: 0.35
+    tight_window_minutes: 8
   micro_burst:
     account_share: 0.03
     episodes_min: 1

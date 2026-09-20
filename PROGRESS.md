@@ -4,43 +4,39 @@ Living status file. **Update it at the end of every completed task**, together w
 that task. Source of truth for *what* to build is `PLAN.md`; this file only tracks *where we are*.
 
 - **Plan version:** v1 (2026-09-16) · **Started:** 2026-09-20
-- **Current phase:** Phase 3 — Splits, baselines, XGBoost (PLAN §17, Phase 3) · Phases 0-2 complete, tagged `phase-0`, `sim-v1`, `phase-2`
+- **Current phase:** Phase 4 — Graph layer (PLAN §17, Phase 4) · Phases 0-3 complete · tags `phase-0`, `sim-v1`, `phase-2`, **`sim-v2`**
 - **Phase 1 progress:** 8 / 8 ✅ — **simulator FROZEN, tagged `sim-v1`**
 - **Phase 2 progress:** 7 / 7 ✅ — tagged `phase-2`
 - **Phase 3 progress:** 6 / 6 ✅ (E3 ablation belongs to Phase 4)
-- **Overall:** 27 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Overall:** 28 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**BLOCKED ON A DECISION — the `sim-v2` question (PLAN §4.8).**
+**Phase 4 · Task 1 — set the graph fan-out caps (PLAN §6.1, prompt P4.1).**
+Measure the accounts-per-device and accounts-per-IP distributions over the **train**
+period, then set `device_cap` and `ip_cap` in a new `configs/graph.yaml`. The caps have
+to drop carrier NAT (hundreds of unrelated accounts behind one IP) while keeping offices
+and the sim-v2 widely shared devices, which are legitimate mid-size clusters.
 
-E2 came back at **validation PR-AUC 0.9995**, above the 0.995 line §4.8 calls
-"suspiciously perfect". That section permits exactly one simulator revision (`sim-v2`) in
-this situation, and it is your call. **Nothing has been changed.**
+Then `graph/projection.py` (the §6.1 SQL, with `ORDER BY` so Louvain is deterministic).
 
-Full evidence, including the check that this is *not* leakage, is in
-**`reports/sim_realism_review.md`**. The short version: the hard negatives are all present
-and individually correct, but none reaches the region its matching fraud pattern occupies.
-Zero of 65,604 legitimate rows have `dev_accts_30d >= 5`, zero look like ATO, one looks
-like velocity.
+**Context for the ablation:** sim-v2 is spent and E2 ring recall is 1.00, so E3 cannot
+show a recall gain. Report what it *can* show — whether the graph features are selected,
+where they rank in importance, and whether they survive ablating behavioural features —
+and say plainly in the README if they add nothing measurable here.
 
-Why it matters beyond a flattering number: **the Phase 4 graph ablation cannot show
-anything.** E3 vs E2 ring recall is the project's headline differentiator, and E2 already
-catches 100% of rings, so there is no headroom left for graph features to prove value.
-
-Phase 4 can technically start either way, but building the ablation before this is settled
-risks building it on data that cannot demonstrate it.
+Blocked on nothing.
 
 ---
 
 ## Next up (in order)
 
-1. **Decide on `sim-v2`** (see *Currently working on* and `reports/sim_realism_review.md`).
-2. If yes: adjust the four hard-negative knobs, re-run `make data`, `make features`, `make experiments`, re-freeze as `sim-v2` with the reason in the README.
-3. If no: record the decision and the caveat in the README, then continue as-is.
-4. Then **Phase 4** — the graph layer (§6): measure device/IP fan-out to set the caps, `projection.py`, `algorithms.py`, `snapshots.py`, `join.py`, and the **E3 ablation**.
+1. **P4.1** — fan-out measurement, `configs/graph.yaml`, `graph/projection.py` (see *Currently working on*).
+2. **P4.2** — `graph/algorithms.py`: degree, clustering, seeded Louvain, community aggregates, personalised PageRank with the 14-day label delay.
+3. **P4.3** — `graph/snapshots.py` (89 daily snapshots, log the runtime; over ~10 min means switch to weekly) and `graph/join.py` (the two-step point-in-time join).
+4. **P4.4** — **E3** on 36 features with parameter set P unchanged, plus the ablation table.
 
 ---
 
@@ -98,6 +94,8 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-20 | 3 | `tests/test_training_smoke.py`, 9 slow tests (category levels from config, no reweighting, search reproducible) | `make test-all` |
 | 2026-09-20 | 3 | **E2 beats E1 by +0.3689 PR-AUC — the Day-5 checkpoint is met** | `reports/experiments/` |
 | 2026-09-20 | 3 | ⚠️ **E2 crosses the §4.8 threshold (>0.995); `sim-v2` decision pending** | `reports/sim_realism_review.md` |
+| 2026-09-20 | 3 | **`sim-v2` applied and frozen** (PLAN §4.8 one-time revision): widely shared devices, travel/VPN on a new device, tighter sprees. 26/26 checks pass; 494,189 events, 1.691% fraud | `reports/sim_realism_review.md`; sha256 `4013268a…` |
+| 2026-09-20 | 3 | Re-ran E1/E2 on valid only. **E1 0.6305 -> 0.4181** (precision 0.928 -> 0.622, FPR 6.75x) — the negatives genuinely overlap now. **E2 0.9995 -> 0.9973**, ring recall still 1.00 | `reports/experiments/` |
 | 2026-09-20 | 1 | **SIMULATOR FROZEN — tagged `sim-v1`.** `configs/sim.yaml` sha256 `97404e57e5da143b1f1b47c11caac96d315ce5fe85da1f47feba5cda9976863f` matches the report and the run manifest | `git tag sim-v1`; CLAUDE.md invariant 11 |
 
 ---
@@ -282,6 +280,8 @@ again in either file.
 | 2026-09-20 | `configs/model.yaml` rules corrected to match §7.3 exactly | The first draft had R2-R4 wrong (it merged the ATO and fan-out rules and dropped the ring rule). §7.3 is: R1 `acct_cnt_5m>=5`; R2 `geo_speed_kmh>=900 AND new_device`; R3 `dev_accts_1h>=5 OR (acct_small_1h>=3 AND acct_declines_1h>=2)`; R4 `dev_accts_30d>=3 AND account_age_days<30` | §7.3 |
 | 2026-09-20 | E1 is reported where the rules fire, not at a budget-constrained threshold | Rules have no threshold to turn down at serving time. Forcing them through the operating-point search would hide how much they over-alert, which is half of what the baseline is for. `metrics.evaluate_at` was added for this | §7.3, §7.7 |
 | 2026-09-20 | `splits.load` now also joins the raw `amount` from `events.parquet` | Value detection rate weights recall by money and the feature table only carries `log_amount`. `amount` travels with the row but is **not** a feature: `feature_matrix` still selects by the spec | §7.8 |
+| 2026-09-20 | **`sim-v2`: the one revision §4.8 allows, now spent.** Four config knobs — `devices.shared_device_share` (5-15 account groups), `travel.new_device_share`, `vpn.new_device_share`, `shopping_spree.tight_share` | E2 hit 0.9995 with literally zero legitimate overlap on three fraud shapes. After: 866 legit rows at `dev_accts_30d>=5` (was 0), 283 at `acct_cnt_5m>=5` (was 1). Legit `dev_accts_30d` now reaches 14 against a ring median of 4. **No sim-v3** | §4.8 |
+| 2026-09-20 | Two hard-negative tests rewritten for the new intent | They asserted the old too-clean behaviour: that every VPN session used an owned device, and that every shared device was a household one. Both are deliberately false under sim-v2. The replacements assert the *new* contract, including a new test that a legitimate device must reach the ring band | §4.4, §4.8 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---

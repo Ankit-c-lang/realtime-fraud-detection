@@ -104,7 +104,7 @@ def generate_legit(
     # Travel is applied last so it relocates the injected events too. Doing it first
     # left a spree seeded at home sitting inside the trip window in the wrong city,
     # which produced an instant city change no journey could explain.
-    frame = _apply_travel(rng, config, accounts, merchants, frame)
+    frame = _apply_travel(rng, config, accounts, merchants, population, frame)
 
     end = start + pd.Timedelta(days=days)
     frame = frame[(frame["event_time"] >= start) & (frame["event_time"] < end)]
@@ -268,6 +268,7 @@ def _assemble(
 
     device = _choose_devices(rng, accounts, population, account_row, event_time)
     ip_row = _choose_ips(rng, config, accounts, population, account_row, event_time, online)
+    device = _apply_vpn_device_swap(rng, config, accounts, population, account_row, ip_row, device)
 
     ips = population.ips
     lat = np.where(online, ips["lat"].to_numpy()[ip_row], merchants["lat"].to_numpy()[merchant_row])
@@ -339,6 +340,37 @@ def _ground_card_present(
             merchant_row[rows] = rng.choice(pool, size=len(rows))
 
     return merchant_row, online
+
+
+def _apply_vpn_device_swap(
+    rng: np.random.Generator,
+    config: dict[str, Any],
+    accounts: pd.DataFrame,
+    population: Population,
+    account_row: np.ndarray,
+    ip_row: np.ndarray,
+    device: np.ndarray,
+) -> np.ndarray:
+    """A VPN session from the account's other machine (PLAN §4.8 sim-v2 revision).
+
+    Before this, a foreign IP on a new device was unique to account takeover, so that
+    combination separated the classes perfectly. A work laptop on a VPN is the ordinary
+    version of the same shape. See reports/sim_realism_review.md.
+    """
+    share = float(config["ip_pools"]["vpn"].get("new_device_share", 0.0))
+    if share <= 0.0 or population.spare_devices.empty:
+        return device
+
+    is_vpn = (population.ips["ip_type"].to_numpy() == "vpn")[ip_row]
+    swap = is_vpn & (rng.random(len(device)) < share)
+    if not swap.any():
+        return device
+
+    spare = population.spare_devices.set_index("account_id")["device_id"]
+    account_ids = accounts["account_id"].to_numpy()[account_row]
+    device = device.copy()
+    device[swap] = spare.reindex(account_ids[swap]).to_numpy()
+    return device
 
 
 def _draw_status(
@@ -464,6 +496,7 @@ def _apply_travel(
     config: dict[str, Any],
     accounts: pd.DataFrame,
     merchants: pd.DataFrame,
+    population: Population,
     frame: pd.DataFrame,
 ) -> pd.DataFrame:
     """One trip per traveller, with realistic gaps around it (PLAN §4.4).
@@ -524,8 +557,22 @@ def _apply_travel(
         moved.append((rows[away & ~_gap_violations(times[rows], away, gap)], destination))
 
     frame = frame.copy()
+    spare = (
+        population.spare_devices.set_index("account_id")["device_id"]
+        if not population.spare_devices.empty
+        else None
+    )
+    new_device_share = float(spec.get("new_device_share", 0.0))
+
     for rows, destination in moved:
         _relocate(frame, rows, destination, merchants, cities, rng)
+        # sim-v2: a traveller who picks up a local handset. Without this, travel never
+        # coincided with a new device and "impossible travel AND new device" had zero
+        # legitimate overlap.
+        if spare is not None and len(rows) and rng.random() < new_device_share:
+            account = frame.loc[frame.index[rows[0]], "account_id"]
+            if account in spare.index:
+                frame.loc[frame.index[rows], "device_id"] = spare[account]
 
     return frame[~drop].reset_index(drop=True)
 
@@ -634,7 +681,15 @@ def _inject_shopping_sprees(
 
         picked = rng.choice(local, size=min(shops, len(local)), replace=False)
         picked = picked[rng.integers(0, len(picked), count)]
-        offsets = rng.integers(1, int(spec["window_minutes"]) * 60, count)
+        # sim-v2: some sprees are genuinely rapid (a checkout run, booking tickets).
+        # Spread over 90 minutes they never reached acct_cnt_5m >= 5, which made that
+        # count a clean velocity signature.
+        window = (
+            int(spec["tight_window_minutes"])
+            if rng.random() < float(spec.get("tight_share", 0.0))
+            else int(spec["window_minutes"])
+        )
+        offsets = rng.integers(1, window * 60, count)
         rows.append(_rows_from_template(rng, seed, merchants, picked, offsets, by_name, where))
 
     return pd.concat(rows, ignore_index=True) if rows else frame.iloc[:0]

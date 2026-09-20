@@ -1,49 +1,49 @@
 {
   "details": {
-    "best_iteration": 98,
-    "early_stop_rows": 38580,
+    "best_iteration": 325,
+    "early_stop_rows": 38770,
     "n_trials": 20,
     "note": "Fitted on train, stopped on early_stop, selected on valid. No reweighting: the probability is blended with an anomaly percentile later (PLAN \u00a77.2).",
     "params": {
       "colsample_bytree": 0.6,
       "learning_rate": 0.1,
-      "max_depth": 8,
-      "min_child_weight": 1,
+      "max_depth": 4,
+      "min_child_weight": 5,
       "reg_lambda": 5,
-      "subsample": 0.9
+      "subsample": 0.7
     },
     "scale_pos_weight": 1,
-    "search_seconds": 88.7,
-    "train_rows": 213470
+    "search_seconds": 113.2,
+    "train_rows": 213215
   },
   "experiment_id": "E2",
   "feature_spec_version": "fs1",
-  "generated_at": "2026-09-20T13:21:29+00:00",
-  "git_commit": "ae54c05",
+  "generated_at": "2026-09-20T14:29:20+00:00",
+  "git_commit": "6560d20",
   "metrics": {
-    "alert_rate": 0.014979416448811563,
-    "alerts": 997,
-    "f1": 0.9738595592004101,
-    "false_positive_rate": 0.0007164197305042375,
+    "alert_rate": 0.013926359101116823,
+    "alerts": 924,
+    "f1": 0.9668508287292817,
+    "false_positive_rate": 0.0007485144279974948,
     "hold": {
-      "alerts": 997,
-      "precision": 0.9528585757271816,
-      "threshold": 0.09042925773997151
+      "alerts": 795,
+      "precision": 1.0,
+      "threshold": 0.9294692399217175
     },
-    "pr_auc": 0.9994706333658763,
-    "precision": 0.9528585757271816,
-    "recall": 0.9958071278825996,
+    "pr_auc": 0.9973428727951896,
+    "precision": 0.946969696969697,
+    "recall": 0.9875846501128668,
     "recall_by_pattern": {
       "ATO": 1.0,
       "CARD_TESTING": 1.0,
       "RING": 0.9961977186311787,
-      "VELOCITY": 0.9876543209876543
+      "VELOCITY": 0.9382716049382716
     },
-    "roc_auc": 0.9999919311306502,
-    "threshold": 0.09042925773997151,
-    "value_detection_rate": 0.9965690225299609
+    "roc_auc": 0.9999535174160897,
+    "threshold": 0.11576289550898826,
+    "value_detection_rate": 0.992667408404965
   },
   "name": "XGBoost, 30 hot features",
-  "rows": 66558,
+  "rows": 66349,
   "split": "valid"
 }

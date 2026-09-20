@@ -1,10 +1,10 @@
 {
   "details": {
     "firing_rates": {
-      "r1_velocity": 0.002959824513957751,
-      "r2_ato": 0.00042068571771988343,
-      "r3_card_testing": 0.004402175546140209,
-      "r4_ring": 0.0029147510442020493
+      "r1_velocity": 0.006239732324526368,
+      "r2_ato": 0.0004521545162700267,
+      "r3_card_testing": 0.004416042442237261,
+      "r4_ring": 0.003180153431099188
     },
     "note": "Rules give a binary decision. PR-AUC ranks by how many rules fired, which is a stand-in, not a probability. Metrics are reported where the rules fire, not at a budget-constrained threshold.",
     "thresholds": {
@@ -28,32 +28,32 @@
   },
   "experiment_id": "E1",
   "feature_spec_version": "fs1",
-  "generated_at": "2026-09-20T13:21:29+00:00",
-  "git_commit": "ae54c05",
+  "generated_at": "2026-09-20T14:29:20+00:00",
+  "git_commit": "6560d20",
   "metrics": {
-    "alert_rate": 0.010396947023648547,
-    "alerts": 692,
-    "f1": 0.7800729040097205,
-    "false_positive_rate": 0.0007621486494725931,
+    "alert_rate": 0.013986646369952825,
+    "alerts": 928,
+    "f1": 0.6361631753031974,
+    "false_positive_rate": 0.005361807433206544,
     "hold": {
       "alerts": 0,
       "precision": null,
       "threshold": null
     },
-    "pr_auc": 0.6305343950141402,
-    "precision": 0.9277456647398844,
-    "recall": 0.6729559748427673,
+    "pr_auc": 0.4181158297210529,
+    "precision": 0.6217672413793104,
+    "recall": 0.6512415349887133,
     "recall_by_pattern": {
-      "ATO": 0.17567567567567569,
+      "ATO": 0.1839080459770115,
       "CARD_TESTING": 0.7967914438502673,
       "RING": 0.4828897338403042,
       "VELOCITY": 0.8395061728395061
     },
-    "roc_auc": 0.8361049020762017,
+    "roc_auc": 0.8230003807916721,
     "threshold": 1.0,
-    "value_detection_rate": 0.2716774336608734
+    "value_detection_rate": 0.28863042530103034
   },
   "name": "Rules baseline R1-R4",
-  "rows": 66558,
+  "rows": 66349,
   "split": "valid"
 }

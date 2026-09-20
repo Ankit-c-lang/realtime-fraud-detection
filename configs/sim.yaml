@@ -77,6 +77,17 @@ devices:
   family_size_max: 4
   family_device_share: 0.40    # share of a family member's transactions on it
 
+  # --- sim-v2 (PLAN §4.8 one-time revision, 2026-09-20) --------------------
+  # Widely shared legitimate devices: household tablets, second-hand handsets, the
+  # phone behind a small shop's counter. Without these NO legitimate account ever
+  # shares a device with 5+ others, so dev_accts_30d alone nearly identifies a ring
+  # and the graph ablation has nothing left to prove.
+  # See reports/sim_realism_review.md.
+  shared_device_share: 0.04    # of accounts sitting on a widely shared device
+  shared_group_min: 5
+  shared_group_max: 15
+  shared_device_usage_share: 0.35
+
 # --- IP pools (PLAN §4.3) ---------------------------------------------------
 ip_pools:
   # Carrier-grade NAT: thousands of unrelated accounts behind a few IPs.
@@ -105,6 +116,9 @@ ip_pools:
     n_ips: 10
     account_share: 0.02
     usage_share: 0.10          # of an affected account's ONLINE transactions
+    # sim-v2: a VPN session from a different machine (work laptop, travel tablet), so
+    # foreign-plus-new-device is no longer unique to account takeover.
+    new_device_share: 0.25
 
 # --- legitimate behaviour (PLAN §4.4) ---------------------------------------
 legit:
@@ -135,6 +149,10 @@ hard_negatives:
     domestic_share: 0.75
     min_gap_hours_domestic: 2.0
     min_gap_hours_international: 6.0
+    # sim-v2: a traveller who buys or borrows a local handset. Previously travel
+    # never coincided with a new device, so "impossible travel AND new device" was a
+    # perfect ATO signature with zero legitimate overlap.
+    new_device_share: 0.30
   shopping_spree:              # imitates velocity abuse
     account_day_share: 0.02
     extra_txns_min: 4
@@ -142,6 +160,11 @@ hard_negatives:
     window_minutes: 90
     merchants_min: 2
     merchants_max: 5
+    # sim-v2: some sprees are genuinely rapid (a checkout run, ticket booking). Spread
+    # over 90 minutes they never reached acct_cnt_5m >= 5, so that count was a clean
+    # velocity signature.
+    tight_share: 0.35
+    tight_window_minutes: 8
   micro_burst:                 # imitates card testing
     account_share: 0.03
     episodes_min: 1

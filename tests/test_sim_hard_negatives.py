@@ -178,10 +178,16 @@ def test_travel_produces_real_trips_with_believable_gaps(
     assert gaps.min() >= float(spec["min_gap_hours_domestic"])
 
 
-def test_vpn_use_looks_like_impossible_travel_on_the_same_device(
-    events: pd.DataFrame, population: Population
+def test_vpn_use_looks_like_impossible_travel(
+    events: pd.DataFrame, population: Population, config: dict[str, Any]
 ) -> None:
-    """A foreign IP with no device change: the ATO signal, legitimately produced."""
+    """A foreign IP on an ordinary account: the ATO signal, legitimately produced.
+
+    Most VPN traffic stays on a device the account already owns, which is what makes
+    the negative hard. A minority comes from another machine (sim-v2), because
+    "foreign AND new device" being unique to account takeover is exactly what made the
+    two classes perfectly separable (reports/sim_realism_review.md).
+    """
     registry = population.ips[["ip", "ip_type", "country"]].rename(
         columns={"country": "ip_country"}
     )
@@ -191,23 +197,47 @@ def test_vpn_use_looks_like_impossible_travel_on_the_same_device(
     assert len(vpn) > 0, "no VPN traffic at all"
     assert (vpn["ip_country"] != "IN").all()
 
-    # The account keeps using its own devices, which is what makes this hard.
     owned = population.account_devices.groupby("account_id")["device_id"].apply(set)
-    assert all(row["device_id"] in owned[row["account_id"]] for _, row in vpn.iterrows())
+    on_own_device = [
+        row["device_id"] in owned.get(row["account_id"], set()) for _, row in vpn.iterrows()
+    ]
+    assert sum(on_own_device) > 0, "every VPN session came from an unknown device"
 
 
-def test_households_share_a_device_across_accounts(
+def test_legitimate_devices_are_shared_across_accounts(
     events: pd.DataFrame, population: Population
 ) -> None:
-    """The shared-device cluster a fraud ring has to be told apart from."""
+    """The shared-device clusters a fraud ring has to be told apart from.
+
+    Two populations provide this: households of 2-4, and the widely shared devices
+    added in sim-v2 that reach into the 5-15 band a ring occupies. Without the second,
+    a device count alone nearly identified a ring
+    (reports/sim_realism_review.md).
+    """
     per_device = events.groupby("device_id")["account_id"].nunique()
     shared = per_device[per_device > 1]
-
     assert len(shared) >= 5
-    household = set(
-        population.devices.loc[population.devices["device_type"] == "family", "device_id"]
+
+    legitimate = set(
+        population.devices.loc[
+            population.devices["device_type"].isin(["family", "shared"]), "device_id"
+        ]
     )
-    assert set(shared.index) <= household
+    assert set(shared.index) <= legitimate
+
+
+def test_some_legitimate_devices_reach_the_ring_band(
+    events: pd.DataFrame, population: Population, config: dict[str, Any]
+) -> None:
+    """sim-v2: legitimate accounts must exist at 5+ accounts per device.
+
+    A ring puts 6-15 accounts on 2-4 devices. If no honest device ever reaches five,
+    dev_accts_30d separates the classes by itself and the graph layer proves nothing.
+    """
+    floor = int(config["devices"]["shared_group_min"])
+    per_device = events.groupby("device_id")["account_id"].nunique()
+
+    assert (per_device >= floor).any(), "no legitimate device reaches the fraud-ring band"
 
 
 def test_offices_share_an_ip_during_working_hours_only(
