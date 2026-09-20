@@ -258,6 +258,7 @@ def build(version: str, *, n_jobs: int = -1) -> tuple[Path, dict[str, Any]]:
     from fraud.modeling.experiments import EXPERIMENTS_DIR, read
     from fraud.modeling.metrics import evaluate_at
     from fraud.modeling.splits import load_many, target
+    from fraud.scoring import reasons
 
     settings = Settings.from_env()
     lopo_path = EXPERIMENTS_DIR / "lopo.json"
@@ -275,7 +276,12 @@ def build(version: str, *, n_jobs: int = -1) -> tuple[Path, dict[str, Any]]:
     detector = iforest.fit(frames["train"], n_jobs=n_jobs)
 
     valid = frames["valid"]
-    p_xgb = train_xgb.predict(model, valid, warm=True)
+    # The probability is taken from the booster margin, exactly as RiskModel does at
+    # serving time, rather than from predict_proba. The two agree to about 1e-7, which is
+    # enough to move rows across the threshold and leave the metadata claiming metrics the
+    # deployed artifact does not reproduce. _verify_round_trip below pins them together.
+    margin = reasons.margins(model.get_booster(), train_xgb.as_model_input(valid, warm=True))
+    p_xgb = 1.0 / (1.0 + np.exp(-margin))
     anomaly = detector.percentile(valid)
     risk = blend.blend(p_xgb, anomaly, weight)
 
@@ -306,8 +312,32 @@ def build(version: str, *, n_jobs: int = -1) -> tuple[Path, dict[str, Any]]:
         detector=detector,
         metadata=metadata,
     )
+    _verify_round_trip(directory, valid, risk)
     write_current(settings.model_dir, version)
     return directory, metadata
+
+
+def _verify_round_trip(directory: Path, valid: pd.DataFrame, risk: np.ndarray) -> None:
+    """The saved artifact must reproduce the scores its own metadata reports.
+
+    Serialisation is where a model quietly becomes a different model: a category level
+    reordered, a quantile array truncated, a booster written at the wrong iteration. None
+    of those raise; they just shift the scores a little. Checking here means the failure
+    surfaces at build time rather than as an unexplained gap between the results table and
+    production months later.
+    """
+    from fraud.scoring.risk_model import RiskModel
+
+    reloaded = RiskModel.load(directory.name, model_dir=directory.parent).score_batch(
+        valid, explain=False
+    )
+    worst = float(np.abs(reloaded.risk - risk).max())
+    if worst > 1e-9:
+        raise AssertionError(
+            f"the saved artifact does not reproduce its own scores: max |diff| = {worst:.3e}. "
+            "The metadata metrics would not describe the deployed model (PLAN §8)."
+        )
+    logger.info("round trip verified: max |risk diff| = %.1e", worst)
 
 
 def main(argv: list[str] | None = None) -> int:

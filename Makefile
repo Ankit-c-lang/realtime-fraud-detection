@@ -66,7 +66,11 @@ train:  ## Build the final model into models/<V> (PLAN §8)
 	$(RUN) python -m fraud.modeling.artifacts --version $(V)
 
 evaluate-test:  ## The single guarded test-set evaluation of models/<V> (PLAN §7.11)
-	@echo "not implemented yet: $@ — Phase 5, PLAN §7.11"; exit 1
+	ALLOW_TEST=1 $(RUN) python -m fraud.modeling.evaluate_test --version $(V)
+	$(MAKE) results
+
+results:  ## Render reports/results.md and the contribution figure (PLAN §7.9)
+	$(RUN) python scripts/export_results.py
 
 all: data features graph train  ## The whole offline pipeline
 

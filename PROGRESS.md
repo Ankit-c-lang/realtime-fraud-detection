@@ -9,33 +9,34 @@ that task. Source of truth for *what* to build is `PLAN.md`; this file only trac
 - **Phase 2 progress:** 7 / 7 ✅ — tagged `phase-2`
 - **Phase 3 progress:** 6 / 6 ✅ (E3 ablation belongs to Phase 4)
 - **Phase 4 progress:** 6 / 6 ✅
-- **Phase 5 progress:** 6 / 8
-- **Overall:** 40 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Phase 5 progress:** 8 / 8 — code complete; **awaiting the user's single `make evaluate-test V=v1`**
+- **Overall:** 42 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Phase 5 · Task 7 — E4/E5 on valid, then P5.3 (`evaluate_test.py`, `export_results.py`).**
-`models/v1` exists and loads through `RiskModel` with the compatibility checks passing.
-What remains is writing E4 and E5 to `reports/experiments/`, then `modeling/evaluate_test.py`
-(§7.11: `ALLOW_TEST=1`, one appended line in `reports/test_runs.log`) and
-`scripts/export_results.py`, which renders `reports/results.md` and the global
-contribution figure.
+**Nothing — Phase 5 code is complete and waiting on one action from the user.**
 
-**The user runs `make evaluate-test V=v1` themselves — I do not run it.**
+`make evaluate-test V=v1` reads the test split, **once**. It is deliberately not run
+here (prompt P5.3). It will fill `metrics.test` in `models/v1/metadata.json`, write
+`reports/experiments/E{1,2,3,4}_test.json`, append the first line of
+`reports/test_runs.log`, and re-render `reports/results.md`.
 
-⚠️ Open decision for the user: **the HOLD tier is disabled** because it does not separate
-from REVIEW on this data (see the deviations table). It is reported, not tuned around.
+Proof it has not been read: `reports/test_runs.log` does not exist and
+`models/v1/metadata.json` has `metrics.test = null`.
+
+⚠️ Still open for the user: **the HOLD tier is disabled** because it does not separate
+from REVIEW on this data (see the deviations table).
 
 ---
 
 ## Next up (in order)
 
-1. **E4 / E5** written to `reports/experiments/` from `models/v1` and `lopo.json`.
-2. **P5.3** — `modeling/evaluate_test.py` (§7.11) and `scripts/export_results.py` → `reports/results.md` + `reports/figures/`.
-3. **`make evaluate-test V=v1`** — **run by the user, once.** Fills `metrics.test` in `models/v1/metadata.json` and appends to `reports/test_runs.log`.
-4. **Phase 6** — `features/store_redis.py` first, then the replayer and the scorer.
+1. **`make evaluate-test V=v1`** — **the user runs this, once.** Then `make results` re-renders the test tables (the target chains it automatically).
+2. **Phase 6 · P6.1** — `features/store_redis.py` first, with `test_parity_redis.py` and `test_idempotency.py`.
+3. **Phase 6 · P6.2** — `stream/replayer.py`: pacing, label stripping, backpressure.
+4. **Phase 6 · P6.3** — `stream/scorer.py`: consumer group, idempotent per-event commit, XACK only after the sink flush.
 
 ---
 
@@ -113,6 +114,9 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-20 | 5 | `configs/reason_codes.yaml` (all 36 features) + `scoring/reasons.py` — native `pred_contribs`, top-3 positive contributions, anomaly reason | additivity 2.0e-05 on 5,000 valid rows, `tests/test_reason_codes.py` 16 passed |
 | 2026-09-20 | 5 | `modeling/artifacts.py` + `make train V=v1` — **`models/v1` and `models/CURRENT` written** with the complete §8 metadata | `models/v1/` 6 files; 🚩 Day-8 checkpoint half met |
 | 2026-09-20 | 5 | `scoring/risk_model.py` — the one path from features to decisions, with startup refusals on feature-spec and library drift | `tests/test_scoring.py` 31 passed |
+| 2026-09-20 | 5 | **E4** (blend at `w*`, scored through `RiskModel`) and **E5** (LOPO evidence) on valid | `reports/experiments/E4.json`, `E5.json` |
+| 2026-09-20 | 5 | `modeling/evaluate_test.py` — `ALLOW_TEST=1` guard, threshold taken from the artifact, `metrics.test` written once, append-only `reports/test_runs.log` | `tests/test_evaluate_test.py` 17 passed; **not run against test** |
+| 2026-09-20 | 5 | `scripts/export_results.py` + `make results` — generates `reports/results.md` (§7.9 tables) and the shap beeswarm | `reports/results.md`, `reports/figures/global_contributions.png` |
 
 ---
 
@@ -171,14 +175,14 @@ before continuing — do not silently slip.
 - [x] 7. `test_graph_*`, `test_asof_join.py`
 - **Gate:** 89 snapshots < ~10 min (else weekly + document); E3 ring recall clearly above E2
 
-### Phase 5 — Isolation Forest, blend, explanations, artifacts (Day 8, ~8 h, 5/10) — IN PROGRESS (6 / 8)
+### Phase 5 — Isolation Forest, blend, explanations, artifacts (Day 8, ~8 h, 5/10) — CODE COMPLETE (8 / 8), awaiting the single test evaluation
 - [x] 1. `modeling/iforest.py` — fit on train only, label-free ✅ 2026-09-20
 - [x] 2. `modeling/blend.py` — four `XGB_-k` models, grid over `w`, pick `w*` (§7.6); `w* = 0.5`, fallback not needed ✅ 2026-09-20
 - [x] 3. `modeling/decisions.py` — REVIEW / HOLD thresholds on valid; **HOLD disabled, it does not separate** ✅ 2026-09-20
 - [x] 4. `scoring/reasons.py` + `configs/reason_codes.yaml` — top-3 reasons + anomaly reason, all 36 features ✅ 2026-09-20
 - [x] 5. `modeling/artifacts.py` — save/load `models/v1`, write `models/CURRENT`, `make train V=v1` ✅ 2026-09-20
 - [x] 6. `scoring/risk_model.py` — `RiskModel.load()` / `score_batch()` + startup compat checks ✅ 2026-09-20
-- [ ] 7. **E4**, **E5 (LOPO)** on valid, then `make evaluate-test V=v1` **exactly once** → `reports/results.md`
+- [x] 7. **E4**, **E5 (LOPO)** on valid ✅ 2026-09-20 · `evaluate_test.py` + `export_results.py` written; **`make evaluate-test V=v1` is the user's to run**
 - [x] 8. `test_scoring.py` (31) + `test_reason_codes.py` (16) ✅ 2026-09-20 · `test_training_smoke.py` part 2 still open
 - **🚩 CHECKPOINT (end of Day 8): `models/v1` + `reports/results.md` exist.** Exactly one line in `reports/test_runs.log`.
 
@@ -310,6 +314,10 @@ again in either file.
 | 2026-09-20 | `p_xgb` is computed as the logistic of the margin rather than by a second `predict_proba` call | The reasons come from `pred_contribs`, which sums to that same margin. Deriving both from one number makes the score and its explanation provably consistent, and the §9.6 re-score check compares to 1e-9 | §7.10, §9.6 |
 | 2026-09-20 | `make train` reads `w*` from `reports/experiments/lopo.json` instead of recomputing it | The weight in the artifact is then traceable to a recorded experiment rather than to a fit that happened during packaging, and `make train` stays an 8-second step. It fails with a clear message if the file is missing | §7.6, §0.4 |
 | 2026-09-20 | Only alert rows are explained | `pred_contribs` is the expensive part of scoring and §7.10 only ever shows reasons for REVIEW and HOLD rows. ALLOW rows get an empty list | §7.10 |
+| 2026-09-20 | `build()` computes `p_xgb` from the booster margin, and the saved artifact is verified to reproduce its own scores | The first build recorded valid metrics from `predict_proba` while `RiskModel` scores from the margin. They agree to ~1e-7, which was enough to move 6 rows across the threshold and leave the metadata claiming PR-AUC 0.9940 where the deployed artifact produced 0.9938. Both paths now use the margin and `_verify_round_trip` asserts max \|risk diff\| ≤ 1e-9 at build time; it currently measures exactly 0 | §8, §9.6 |
+| 2026-09-20 | `evaluate_test.py` applies thresholds chosen on valid, and refits E2/E3 deterministically rather than reusing stored models | Re-deriving a threshold on test would tune the decision to the data judging it (L10). E2 and E3 have no saved artifact, so they are refit from `train` with the recorded seeded parameters — identical models, nothing fitted on test. E4 comes straight from `models/v1` | §7.11 |
+| 2026-09-20 | `EvaluationRun`, not `TestRun` | pytest collects any class named `Test*` and warns — the same trap that renamed `SplitLockedError`. Second occurrence, so it is worth stating as a convention | §13 |
+| 2026-09-20 | The global contribution figure is a real `shap` beeswarm, not the matplotlib fallback | §7.10 allows either. `shap` 0.52 and XGBoost 3.4 agreed, and the beeswarm shows direction and spread rather than magnitude alone — low `account_age_days` and high `dev_accts_30d` visibly push towards fraud. The fallback path is kept and still reachable | §7.10 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---

@@ -1,0 +1,91 @@
+{
+  "best_weight": 0.5,
+  "experiment_id": "E5",
+  "feature_spec_version": "fs1",
+  "generated_at": "2026-09-20T17:14:45+00:00",
+  "git_commit": "7d8292a",
+  "isolation_forest_helps": true,
+  "mean_recall_by_weight": {
+    "0.5": 0.85553,
+    "0.6": 0.849887,
+    "0.7": 0.854966,
+    "0.8": 0.829007,
+    "0.85": 0.840576,
+    "0.9": 0.844244,
+    "0.95": 0.759312,
+    "1": 0.73956
+  },
+  "name": "Leave-one-pattern-out: XGB_-k alone vs blended at w*",
+  "protocol": "PLAN \u00a77.6. For each pattern k, XGB_-k is fitted on train rows excluding k (early stopping excludes k as well) and scored on the full valid split. R_k(w) is OVERALL recall at the budget-constrained threshold from \u00a77.7, recomputed for every (k, w). w* = argmax_w mean_k R_k(w), ties to the larger w. The Isolation Forest is fitted once on all train rows, label-free, and is identical in every run.",
+  "rows": [
+    {
+      "overall_precision": {
+        "alone": 0.975968,
+        "blended": 0.908791,
+        "delta": -0.067177
+      },
+      "overall_recall": {
+        "alone": 0.825056,
+        "blended": 0.933409
+      },
+      "pattern": "VELOCITY",
+      "pattern_recall": {
+        "alone": 0.049383,
+        "blended": 0.635802,
+        "delta": 0.58642
+      }
+    },
+    {
+      "overall_precision": {
+        "alone": 0.996198,
+        "blended": 0.939494,
+        "delta": -0.056704
+      },
+      "overall_recall": {
+        "alone": 0.887133,
+        "blended": 0.963883
+      },
+      "pattern": "ATO",
+      "pattern_recall": {
+        "alone": 0.091954,
+        "blended": 0.701149,
+        "delta": 0.609195
+      }
+    },
+    {
+      "overall_precision": {
+        "alone": 0.95,
+        "blended": 0.818482,
+        "delta": -0.131518
+      },
+      "overall_recall": {
+        "alone": 0.557562,
+        "blended": 0.839729
+      },
+      "pattern": "CARD_TESTING",
+      "pattern_recall": {
+        "alone": 0.005348,
+        "blended": 0.639037,
+        "delta": 0.63369
+      }
+    },
+    {
+      "overall_precision": {
+        "alone": 0.928463,
+        "blended": 0.933846,
+        "delta": 0.005383
+      },
+      "overall_recall": {
+        "alone": 0.688488,
+        "blended": 0.685102
+      },
+      "pattern": "RING",
+      "pattern_recall": {
+        "alone": 0.0,
+        "blended": 0.0,
+        "delta": 0.0
+      }
+    }
+  ],
+  "split": "valid"
+}

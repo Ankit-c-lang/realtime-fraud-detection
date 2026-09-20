@@ -271,6 +271,85 @@ def run_graph_only(
     )
 
 
+def run_e4(valid: pd.DataFrame, *, model: Any = None, split: str = "valid") -> Experiment:
+    """E4: the final blended model, scored through the serving path (PLAN §7.9).
+
+    Deliberately routed through ``RiskModel`` rather than re-assembled here. E4 is the
+    model that actually ships, so the number in the results table has to come from the
+    same code the scorer runs; a separate offline reimplementation could agree with the
+    artifact today and drift from it silently tomorrow (§16 responsibility rules).
+
+    The threshold is the one stored in the artifact, chosen on valid. It is never
+    re-chosen here — on the test split that would make the headline numbers
+    self-fulfilling (§7.11, L10).
+    """
+    from fraud.modeling.metrics import evaluate_at
+    from fraud.modeling.splits import target
+    from fraud.scoring.risk_model import RiskModel
+
+    risk_model = model or RiskModel.load()
+    bundle = risk_model.bundle
+    scored = risk_model.score_batch(valid, explain=False)
+
+    evaluation = evaluate_at(
+        target(valid).to_numpy(),
+        scored.risk,
+        bundle.thresholds.review,
+        amounts=valid["amount"].to_numpy() if "amount" in valid.columns else None,
+        fraud_type=valid["fraud_type"].to_numpy(),
+    )
+
+    return Experiment(
+        experiment_id="E4" if split == "valid" else f"E4_{split}",
+        name="XGBoost + Isolation Forest at w*, the final model",
+        split=split,
+        evaluation=evaluation,
+        rows=len(valid),
+        details={
+            "model_version": bundle.model_version,
+            "blend_weight": bundle.blend_weight,
+            "threshold_source": (f"models/{bundle.model_version}/metadata.json, chosen on valid"),
+            "hold_enabled": bundle.thresholds.hold_enabled,
+            "hold_degenerate": bundle.thresholds.hold_degenerate,
+            "params": bundle.metadata["xgb_params"],
+            "note": (
+                "Scored through RiskModel, the same path the scorer and the API use. "
+                "The threshold comes from the artifact and is never re-chosen on the "
+                "split being measured (PLAN §7.11)."
+            ),
+        },
+    )
+
+
+def write_e5(lopo: dict[str, Any], directory: Path | None = None) -> Path:
+    """E5: the leave-one-pattern-out evidence for the ensemble (PLAN §7.9).
+
+    Not an Evaluation, so it does not go through ``Experiment``: E5 is a table of four
+    paired comparisons rather than one model on one split. The provenance header is the
+    same, because §0.4 applies to it just as much.
+    """
+    target_dir = directory or EXPERIMENTS_DIR
+    target_dir.mkdir(parents=True, exist_ok=True)
+    path = target_dir / "E5.json"
+
+    payload = {
+        "experiment_id": "E5",
+        "name": "Leave-one-pattern-out: XGB_-k alone vs blended at w*",
+        "split": "valid",
+        "feature_spec_version": FEATURE_SPEC_VERSION,
+        "git_commit": git_commit(),
+        "generated_at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "best_weight": lopo["best_weight"],
+        "isolation_forest_helps": lopo["isolation_forest_helps"],
+        "mean_recall_by_weight": lopo["mean_recall_by_weight"],
+        "rows": lopo["e5_rows"],
+        "protocol": lopo["protocol"],
+    }
+    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    logger.info("wrote %s", path)
+    return path
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the development experiments on valid (PLAN §7.9)."""
     import argparse
@@ -280,6 +359,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run experiments E1-E2 (PLAN §7.9).")
     parser.add_argument("--only", nargs="*", default=None, help="subset, e.g. --only E1")
     parser.add_argument("--warm", action="store_true", help="also run E3 and E3b")
+    parser.add_argument("--final", action="store_true", help="also run E4 and E5")
     parser.add_argument("--jobs", type=int, default=-1, help="XGBoost n_jobs")
     args = parser.parse_args(argv)
 
@@ -287,7 +367,9 @@ def main(argv: list[str] | None = None) -> int:
     wanted = set(args.only) if args.only else {"E1", "E2"}
     if args.warm:
         wanted |= {"E3", "E3b"}
-    warm = bool({"E3", "E3b"} & wanted)
+    if args.final:
+        wanted |= {"E4", "E5"}
+    warm = bool({"E3", "E3b", "E4"} & wanted)
 
     frames = load_many(["train", "early_stop", "valid"], warm=warm)
     logger.info(
@@ -317,6 +399,14 @@ def main(argv: list[str] | None = None) -> int:
             results["E3b"] = run_graph_only(
                 frames["train"], frames["early_stop"], frames["valid"], params, n_jobs=args.jobs
             )
+
+    if "E4" in wanted:
+        results["E4"] = run_e4(frames["valid"])
+    if "E5" in wanted:
+        lopo_path = EXPERIMENTS_DIR / "lopo.json"
+        if not lopo_path.is_file():
+            raise FileNotFoundError(f"{lopo_path} is missing; run `make lopo` first (PLAN §7.6).")
+        write_e5(json.loads(lopo_path.read_text(encoding="utf-8")))
 
     for experiment in results.values():
         write(experiment)
