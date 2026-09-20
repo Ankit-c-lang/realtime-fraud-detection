@@ -5,26 +5,22 @@ that task. Source of truth for *what* to build is `PLAN.md`; this file only trac
 
 - **Plan version:** v1 (2026-09-16) · **Started:** 2026-09-20
 - **Current phase:** Phase 1 — Simulator (PLAN §17, Phase 1) · Phase 0 complete, tagged `phase-0`
-- **Phase 1 progress:** 2 / 8 tasks
-- **Overall:** 10 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Phase 1 progress:** 3 / 8 tasks
+- **Overall:** 11 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Phase 1 · Task 3 — `src/fraud/sim/legit.py` (PLAN §4.4, prompt P1.2).**
-Generate legitimate transactions per account: Poisson daily counts with a weekday factor, a
-diurnal time mixture (peaks ~13:00 and ~20:00, quiet 01:00-06:00, 5% night owls), 70% of
-purchases at the account's regular merchants and 30% exploring by popularity, amounts from
-category median x spend level x lognormal noise, POS location from the merchant and ONLINE
-location from the IP, and a 1.5% decline rate that rises with amount.
+**Phase 1 · Task 4 — `src/fraud/sim/patterns.py` (PLAN §4.5, prompt P1.3).**
+The four fraud injectors, each returning events plus label rows: VELOCITY, ATO,
+CARD_TESTING and RING. Ring mule accounts are created here (their ages are relative to
+each ring's start), along with the ring constraints: 30% device reuse from a ring active
+in the last 30 days, >=12 rings starting inside the test window with >=4 of those reusing
+a device, and >=20 rings starting and finishing inside training.
 
-Must include every hard negative in the §4.4 table: travel, VPN use, phone upgrade, shopping
-spree, micro-payment bursts, low-friction regulars, families/offices, new accounts.
-
-Vectorise within each account; a loop over accounts is fine, a loop over events is not.
-Output the §4.2 event columns and NO label columns. Add `tests/test_sim_hard_negatives.py`
-against `sim_tiny.yaml`, and report the runtime on the full config.
+Labels carry `fraud_type`, `attack_id`, `ring_id` and `label_available_at`
+(= `event_time` + 14 days). Victims' other transactions stay legitimate.
 
 Blocked on nothing.
 
@@ -32,10 +28,10 @@ Blocked on nothing.
 
 ## Next up (in order)
 
-1. **P1.2** — `src/fraud/sim/legit.py` + `tests/test_sim_hard_negatives.py` (see *Currently working on*).
-2. **P1.3** — `src/fraud/sim/patterns.py`: the four injectors, their label rows, and the ring constraints (§4.5). Ring mule accounts are created here, not in `population.py`.
-3. **P1.4** — `src/fraud/sim/generate.py`: assemble, stable-sort by `event_time`, assign `txn_id`, write the four Parquet files and `manifest.json`.
-4. **P1.5** — `src/fraud/sim/checks.py` + `reports/sim_report.md` (§4.8), then freeze and tag `sim-v1`.
+1. **P1.3** — `src/fraud/sim/patterns.py` + `tests/test_sim_patterns.py` (see *Currently working on*).
+2. **P1.4** — `src/fraud/sim/generate.py`: assemble, stable-sort by `event_time`, assign `txn_id`, write the four Parquet files and `manifest.json`. **Re-measure the tiny end-to-end runtime here** and decide whether the `sim_tiny.yaml` 90-day calendar survives (see deviations).
+3. **P1.5** — `src/fraud/sim/checks.py` + `reports/sim_report.md` (§4.8).
+4. Freeze `configs/sim.yaml`, record its sha256 in the report, tag `sim-v1`.
 
 ---
 
@@ -74,6 +70,8 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-20 | 0 | **Phase 0 complete — tagged `phase-0`** | `git tag phase-0` |
 | 2026-09-20 | 1 | `configs/splits.yaml` (§4.7), `categories.yaml` (10 fixed levels), `cities.csv` (15 IN + 8 intl), `sim.yaml` and `sim_tiny.yaml` | `tests/test_configs.py`, 24 tests |
 | 2026-09-20 | 1 | `src/fraud/sim/population.py`: accounts, merchants, devices and the four IP pools, from one `SeedSequence` | `tests/test_sim_population.py`, 38 tests; full config builds in 1.8 s |
+| 2026-09-20 | 1 | Cleanup: `merchants.online_merchant_share` (34.3% measured) and `ip_pools.office.usage_share` (0.50) as explicit knobs in both sim configs | `tests/test_configs.py` + population tests, 28 + 40 |
+| 2026-09-20 | 1 | `src/fraud/sim/legit.py`: vectorised legitimate stream and all nine hard negatives | `tests/test_sim_hard_negatives.py`, 23 tests; full config 488,408 events in 35 s, -0.84% of target |
 
 ---
 
@@ -95,7 +93,7 @@ before continuing — do not silently slip.
 ### Phase 1 — Simulator (Day 1 pm → Day 3 midday, ~16 h, 5/10) — IN PROGRESS
 - [x] 1. Configs: `sim.yaml`, `sim_tiny.yaml`, `cities.csv` (15 IN + 8 intl), `categories.yaml`, `splits.yaml`
 - [x] 2. `sim/population.py` — accounts, merchants, devices, IP pools
-- [ ] 3. `sim/legit.py` — legitimate behaviour + all hard negatives (§4.4)
+- [x] 3. `sim/legit.py` — legitimate behaviour + all hard negatives (§4.4)
 - [ ] 4. `sim/patterns.py` — 4 fraud injectors + ring constraints (§4.5)
 - [ ] 5. `sim/generate.py` — assemble, stable sort, `txn_id`, Parquet + `manifest.json`
 - [ ] 6. `sim/checks.py` — §4.8 checks → `reports/sim_report.md`
@@ -215,6 +213,11 @@ Record anything that departs from the plan, with the reason. Empty so far.
 | 2026-09-20 | New `ip_pools.office.usage_share: 0.50` in both sim configs | **Simulator design choice, not specified by PLAN.md.** Office IP use was effectively certain during weekday working hours, which made affiliated accounts look like they lived at the office. 0.50 splits their weekday-daytime online activity with the home IP. `population.py` carries the value; the weekday and 09:00-18:00 gate belongs to `legit.py`. Named `usage_share` inside the `office:` block rather than `office_usage_share`, to match the sibling `carrier_nat` and `vpn` keys so one code path reads all three | §4.3 |
 | 2026-09-20 | Ring mule accounts are created by `patterns.py`, not `population.py` | Their ages are defined relative to each ring's start date (§4.5), which `population.py` cannot know. It builds the 22,000 legitimate accounts only | §4.3, §4.5 |
 | 2026-09-20 | Shared IPs (NAT, office) fall back to the **nearest** covered city, never a random one | A pool with fewer IPs than cities cannot cover every city. A random fallback fabricates impossible travel and would poison `geo_speed_kmh` for legitimate accounts. Raised full-config same-city placement from 93.3% to 95.7% | §4.3, §5.2 |
+| 2026-09-20 | Regular merchants are drawn from the account's **reachable** pool (online, or physical in its home city), not globally by popularity | A global draw gave a Mumbai account a regular shop in Delhi, so every routine visit looked like travel and `geo_speed_kmh` became meaningless. Defect found while writing `legit.py`; 0 unreachable physical regulars now | §4.4, §5.2 |
+| 2026-09-20 | Channel is decided by category `online_share` alone; POS events are then grounded onto a merchant with a storefront in the account's current city | Letting `is_online` force the channel pushed ONLINE to 92.6%. The grounding step keeps the category (so amounts and the channel mix are unchanged) and guarantees a card-present event is local. Measured 58.5% ONLINE on tiny vs 56.6% category-implied; 0 POS at storefront-less merchants | §4.4, §5.2 |
+| 2026-09-20 | The activity rescale subtracts fraud **and** the expected shopping-spree and micro-burst volume | Scaling the base draw to the full target overshot by +13.8%, outside the ±5% tolerance, because the hard negatives are injected on top. Now -0.84% | §4.3 |
+| 2026-09-20 | Travel is applied **after** sprees and micro-bursts are injected | Applying it first left a spree seeded at home sitting inside the trip window in the wrong city, producing a 0.01 h city change no journey could explain. Minimum POS city-change gap is now 15.95 h | §4.4 |
+| 2026-09-20 | Injected spree and burst rows inherit their seed's IP, so a few card-present rows carry a shared office IP | Keeping the burst on one connection is the point of the hard negative. Harmless: a POS location comes from the merchant, and the account genuinely belongs to that office cluster | §4.4 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---

@@ -206,7 +206,27 @@ def _rate_scale(
         return 1.0
 
     fraud = sum(int(p["target_transactions"]) for p in config["patterns"].values())
-    return max(int(config["target_transactions"]) - fraud, 1) / expected
+    bursts = _expected_micro_burst_events(config, len(accounts))
+
+    # Shopping sprees add events in proportion to the number of ACTIVE account-days,
+    # which is itself proportional to the base volume, so it folds into the divisor.
+    spree = config["hard_negatives"]["shopping_spree"]
+    per_spree = (int(spree["extra_txns_min"]) + int(spree["extra_txns_max"])) / 2.0
+    # P(at least one event) / E[events] for a small-lambda Poisson, i.e. active days
+    # per event. Exact enough at the rates in §4.3 and avoids a second pass.
+    active_day_ratio = 0.91
+    inflation = 1.0 + float(spree["account_day_share"]) * per_spree * active_day_ratio
+
+    budget = int(config["target_transactions"]) - fraud - bursts
+    return max(budget, 1) / (expected * inflation)
+
+
+def _expected_micro_burst_events(config: dict[str, Any], n_accounts: int) -> float:
+    """Micro-bursts are a fixed count per account, independent of the base volume."""
+    spec = config["hard_negatives"]["micro_burst"]
+    episodes = (int(spec["episodes_min"]) + int(spec["episodes_max"])) / 2.0
+    per_episode = (int(spec["txns_min"]) + int(spec["txns_max"])) / 2.0
+    return n_accounts * float(spec["account_share"]) * episodes * per_episode
 
 
 # --- merchants --------------------------------------------------------------
@@ -339,6 +359,21 @@ def _merchant_names(rng: np.random.Generator, category: np.ndarray) -> list[str]
     return [f"{a} {b}" for a, b in zip(first, second, strict=True)]
 
 
+def reachable_merchants(merchants: pd.DataFrame, city: str) -> tuple[np.ndarray, np.ndarray]:
+    """Merchants an account in ``city`` can actually use, with normalised weights.
+
+    An online merchant is reachable from anywhere; a physical one only in its own city.
+    Drawing regulars globally instead would give a Mumbai account a regular shop in
+    Delhi, so every ordinary visit would look like travel and ``geo_speed_kmh`` would be
+    meaningless (PLAN §5.2).
+    """
+    eligible = np.flatnonzero(
+        merchants["is_online"].to_numpy() | (merchants["city"].to_numpy() == city)
+    )
+    weights = merchants["popularity"].to_numpy()[eligible]
+    return eligible, weights / weights.sum()
+
+
 def _build_regular_merchants(
     rng: np.random.Generator,
     config: dict[str, Any],
@@ -351,18 +386,24 @@ def _build_regular_merchants(
     n = len(accounts)
 
     counts = rng.integers(low, high + 1, n)
-    # One draw for everyone, then trim per account: duplicates are dropped, so an
-    # account can end up with slightly fewer regulars than drawn.
-    draws = rng.choice(len(merchants), size=(n, high), p=merchants["popularity"].to_numpy())
-
     account_ids = accounts["account_id"].to_numpy()
     merchant_ids = merchants["merchant_id"].to_numpy()
+    home_city = accounts["home_city"].to_numpy()
+
     owner: list[str] = []
     picked: list[str] = []
-    for row in range(n):
-        unique = pd.unique(draws[row, : counts[row]])
-        owner.extend([account_ids[row]] * len(unique))
-        picked.extend(merchant_ids[unique])
+    # Drawn per city, because the reachable pool depends on where the account lives.
+    for city in np.unique(home_city):
+        members = np.flatnonzero(home_city == city)
+        eligible, weights = reachable_merchants(merchants, str(city))
+        draws = rng.choice(eligible, size=(len(members), high), p=weights)
+
+        for offset, row in enumerate(members):
+            # Duplicates are dropped, so an account can end up with slightly fewer
+            # regulars than were drawn.
+            unique = pd.unique(draws[offset, : counts[row]])
+            owner.extend([account_ids[row]] * len(unique))
+            picked.extend(merchant_ids[unique])
 
     return pd.DataFrame({"account_id": owner, "merchant_id": picked})
 

@@ -136,13 +136,14 @@ def test_spend_and_activity_are_positive(population: Population) -> None:
     assert (population.accounts["activity_rate"] > 0).all()
 
 
-def test_expected_volume_lands_on_target(
+def test_activity_is_rescaled_to_leave_room_for_what_is_added_later(
     population: Population, config: dict[str, Any], window: tuple[pd.Timestamp, pd.Timestamp]
 ) -> None:
-    """Activity is rescaled so the legitimate stream hits target_transactions (§4.3).
+    """The base draw is scaled BELOW the target on purpose (§4.3).
 
-    Fraud is injected on top, so the base is scaled to the target minus the pattern
-    totals. Hard negatives add a little more, which target_tolerance absorbs.
+    Fraud patterns, shopping sprees and micro-bursts are all injected on top, so scaling
+    the base draw to the full target would overshoot. The end-to-end figure is checked by
+    test_sim_hard_negatives.test_full_config_volume_lands_on_target.
     """
     start, end = window
     accounts = population.accounts
@@ -150,9 +151,8 @@ def test_expected_volume_lands_on_target(
     weekday_mean = float(np.mean(config["legit"]["weekday_factor"]))
     expected = float((accounts["activity_rate"] * active_days).sum()) * weekday_mean
 
-    fraud = sum(int(p["target_transactions"]) for p in config["patterns"].values())
     target = int(config["target_transactions"])
-    assert expected + fraud == pytest.approx(target, rel=float(config["target_tolerance"]))
+    assert 0.75 * target < expected < target
 
 
 # --- merchants (PLAN §4.3) --------------------------------------------------
