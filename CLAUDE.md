@@ -55,6 +55,12 @@ All Python targets run through `uv run`.
 8. Scorer: the per-event commit is idempotent; XACK only after the sink flush (§9.2, §9.3).
 9. The API's /score never writes state (§10).
 10. Every number in README or CV comes from reports/ (§0.4).
+11. **configs/sim.yaml is FROZEN at tag `sim-v1` (2026-09-20), sha256 `97404e57e5da143b1f1b47c11caac96d315ce5fe85da1f47feba5cda9976863f`.**
+    Do not edit it, configs/sim_tiny.yaml, configs/categories.yaml, configs/cities.csv or
+    configs/splits.yaml, and do not change simulator behaviour. PLAN §4.8 allows exactly one
+    revision (`sim-v2`): only if validation PR-AUC exceeds 0.995 in Phase 3, only once, with the
+    reason written in the README, and never after test metrics have been seen. Metrics are never
+    improved by editing the generator.
 
 ## Out of scope (do not add)
 MLflow, Optuna, CatBoost, LightGBM, PostgreSQL, Kafka, Spark, Airflow, Neo4j, GNNs, Kubernetes,

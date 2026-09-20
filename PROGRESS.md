@@ -4,32 +4,32 @@ Living status file. **Update it at the end of every completed task**, together w
 that task. Source of truth for *what* to build is `PLAN.md`; this file only tracks *where we are*.
 
 - **Plan version:** v1 (2026-09-16) · **Started:** 2026-09-20
-- **Current phase:** Phase 1 — Simulator (PLAN §17, Phase 1) · Phase 0 complete, tagged `phase-0`
-- **Phase 1 progress:** 7 / 8 tasks
-- **Overall:** 15 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Current phase:** Phase 2 — Feature engine (PLAN §17, Phase 2) · Phases 0-1 complete, tagged `phase-0`, `sim-v1`
+- **Phase 1 progress:** 8 / 8 ✅ — **simulator FROZEN, tagged `sim-v1`**
+- **Overall:** 16 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Phase 1 · Task 8 — freeze the simulator and tag `sim-v1` (PLAN §4.8).**
-Everything the freeze needs is in place: `reports/sim_report.md` records the sha256 of
-`configs/sim.yaml` and all 26 checks pass on the full run. What remains is the decision.
+**Phase 2 · Task 1 — `src/fraud/features/spec.py` (PLAN §5.1-§5.2, prompt P2.1).**
+Define `FEATURE_NAMES` as the single source of feature identity and order, the per-feature
+cold-start defaults, the fixed category levels loaded from `configs/categories.yaml`, and
+`FEATURE_SPEC_VERSION = "fs1"`.
 
-**Waiting on you.** After the freeze §4.8 allows exactly one revision (`sim-v2`), only if
-validation PR-AUC comes back above 0.995 in Phase 3, and never after looking at test
-metrics. Worth a last look at the unspecified constants first (see deviations): the
-category medians and sigmas, Zipf exponent 1.10, diurnal peak sigmas, the
-decline-vs-amount exponent and the office Pareto alpha all shape the data and all become
-fixed at the freeze.
+30 hot features (§5.2). Nothing else in the repository may name or order features, and
+changing any definition means bumping the spec version.
+
+Blocked on nothing. **The simulator is frozen — treat `data/raw/` as fixed input.**
 
 ---
 
 ## Next up (in order)
 
-1. **Freeze decision** — confirm `configs/sim.yaml` is final, then tag `sim-v1` (see *Currently working on*).
-2. Then **Phase 2** — `features/spec.py` (`FEATURE_NAMES`, `FEATURE_SPEC_VERSION = "fs1"`), `state.py` (`AccountState` with an exact JSON round trip), `accounts.py`, then `engine.py` and the 30 hot features (§5.1-§5.4).
-3. `store_memory.py` and `replay.py` -> `hot_features.parquet` plus the checkpoint at `test_start`.
+1. **P2.1** — `features/spec.py`: `FEATURE_NAMES`, defaults, category levels, `FEATURE_SPEC_VERSION` (see *Currently working on*).
+2. **P2.2** — `features/state.py` (`AccountState`, exact JSON round trip) and `features/accounts.py` (`AccountDirectory`, read-only).
+3. **P2.3** — `features/engine.py`: `compute_features()` as a pure function, `update_account()`, `FeatureEngine.process()`. Features computed BEFORE state is updated; half-open windows.
+4. **P2.4** — `features/store_memory.py`, then `replay.py` -> `hot_features.parquet` and the checkpoint at `test_start`.
 
 ---
 
@@ -75,6 +75,7 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-20 | 1 | `src/fraud/sim/generate.py` + `make data`: four Parquet tables and `manifest.json` | `tests/test_sim_schema.py` (16) and `tests/test_sim_determinism.py` (7); full run 494,156 events, 1.687% fraud, 14 MB, **79 s** |
 | 2026-09-20 | 1 | `src/fraud/sim/checks.py`: all 26 §4.8 validations, exits non-zero on failure | `tests/test_sim_checks.py`, 11 tests, each group proven to fail on corrupted data |
 | 2026-09-20 | 1 | `reports/sim_report.md` committed: **26/26 pass**, config sha256 `97404e57…` | `make data` |
+| 2026-09-20 | 1 | **SIMULATOR FROZEN — tagged `sim-v1`.** `configs/sim.yaml` sha256 `97404e57e5da143b1f1b47c11caac96d315ce5fe85da1f47feba5cda9976863f` matches the report and the run manifest | `git tag sim-v1`; CLAUDE.md invariant 11 |
 
 ---
 
@@ -93,7 +94,7 @@ before continuing — do not silently slip.
 - [x] 6. `.github/workflows/ci.yml` (`lint-unit`) + `tests/test_smoke.py` — green on GitHub
 - [x] 7b. Commit + push; `make setup && make lint && make test` green; tag `phase-0`
 
-### Phase 1 — Simulator (Day 1 pm → Day 3 midday, ~16 h, 5/10) — IN PROGRESS
+### Phase 1 — Simulator (Day 1 pm → Day 3 midday, ~16 h, 5/10) — ✅ COMPLETE (2026-09-20), tagged `sim-v1`
 - [x] 1. Configs: `sim.yaml`, `sim_tiny.yaml`, `cities.csv` (15 IN + 8 intl), `categories.yaml`, `splits.yaml`
 - [x] 2. `sim/population.py` — accounts, merchants, devices, IP pools
 - [x] 3. `sim/legit.py` — legitimate behaviour + all hard negatives (§4.4)
@@ -101,10 +102,10 @@ before continuing — do not silently slip.
 - [x] 5. `sim/generate.py` — assemble, stable sort, `txn_id`, Parquet + `manifest.json`
 - [x] 6. `sim/checks.py` — §4.8 checks → `reports/sim_report.md`
 - [x] 7. `test_sim_*` tests
-- [ ] 8. **Freeze** `sim.yaml` (hash in report), commit, tag `sim-v1`
+- [x] 8. **Freeze** `sim.yaml` (hash in report), commit, tag `sim-v1`
 - **Gate:** ~500K events, 1.2-1.8% fraud, ≥12 rings start in test window (≥4 reusing a device), same seed → same hashes
 
-### Phase 2 — Feature engine and offline replay (Day 3 pm → Day 5 am, ~14 h, 6/10)
+### Phase 2 — Feature engine and offline replay (Day 3 pm → Day 5 am, ~14 h, 6/10) — IN PROGRESS
 - [ ] 1. `features/spec.py` — `FEATURE_NAMES`, defaults, `FEATURE_SPEC_VERSION = "fs1"`
 - [ ] 2. `features/state.py` — `AccountState` with exact JSON round trip
 - [ ] 3. `features/accounts.py` — `AccountDirectory`
