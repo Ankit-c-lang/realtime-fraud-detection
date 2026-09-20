@@ -44,6 +44,11 @@ merchants:
   n: 200
   zipf_exponent: 1.10
   international_share: 0.05
+  # Fraction of merchants with no physical storefront (PLAN §4.3, "~35% online").
+  # This is merchant reference data only (§4.2). It does NOT decide a transaction's
+  # channel: that comes from the category's online_share in legit.py, and the model
+  # feature is_online is derived from the event channel (§5.2 feature 4).
+  online_merchant_share: 0.35
   n_low_friction: 5
   low_friction_categories: [digital_goods]
   n_colluding: 10
@@ -70,6 +75,12 @@ ip_pools:
     group_size_alpha: 1.60
     active_hours: [9, 18]
     weekdays_only: true
+    # P(an eligible online transaction uses the office IP) once the weekday and
+    # working-hours gate in legit.py has passed.
+    # SIMULATOR DESIGN CHOICE: PLAN.md does not specify this. 0.50 is the working
+    # assumption, so an affiliated account splits its weekday-daytime online activity
+    # between the office and its home IP instead of appearing to live at the office.
+    usage_share: 0.50
   vpn:
     n_ips: 3
     account_share: 0.02

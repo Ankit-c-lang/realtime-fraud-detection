@@ -5,12 +5,12 @@ No transactions are produced here. This module builds the cast of actors that
 
 Two modelling rules are fixed here because everything downstream depends on them:
 
-*Channel.* ``categories.yaml`` documents ``online_share`` as the probability that a
-transaction in that category is ONLINE. A merchant is flagged ``is_online`` when its
-category is effectively online-only (``online_share >= 0.95``); those merchants always
-produce ONLINE events, and the rest are omnichannel and roll per transaction. That makes
-about 40% of merchants online-only against the "~35%" in §4.3 — close, and it avoids
-reinterpreting a config field that says something else.
+*Merchant is_online vs category online_share.* These are deliberately separate.
+``merchants.online_merchant_share`` decides which merchants have no physical storefront
+(§4.3, "~35% online") and is reference data on the merchant table (§4.2). It does not
+decide any transaction's channel. The channel comes from the category's ``online_share``
+in ``legit.py``, and the model feature ``is_online`` is derived from the event channel,
+not from this column (§5.2, feature 4).
 
 *IP geolocation.* A shared IP is placed in its members' own city wherever possible.
 Placing carrier-NAT or office IPs randomly would make ordinary online shopping look like
@@ -233,8 +233,9 @@ def _build_merchants(
     popularity = 1.0 / rank ** float(spec["zipf_exponent"])
     popularity /= popularity.sum()
 
-    online_share = {c["name"]: float(c["online_share"]) for c in categories}
-    is_online = np.array([online_share[c] >= 0.95 for c in category])
+    # Reference data only: no physical storefront. The channel of a transaction is
+    # decided by the category's online_share in legit.py, never by this flag.
+    is_online = rng.random(n) < float(spec["online_merchant_share"])
 
     international = rng.random(n) < float(spec["international_share"])
     is_foreign = (cities["country"] != "IN").to_numpy()
@@ -722,8 +723,9 @@ def _attach_office_pool(
                     "account_id": account_ids[row],
                     "ip": address,
                     "ip_type": "office",
-                    # Time-gated by active_hours and weekdays_only in legit.py.
-                    "usage_share": 1.0,
+                    # legit.py applies the weekday and working-hours gate on top of
+                    # this probability; population.py only carries the value.
+                    "usage_share": float(spec["usage_share"]),
                 }
             )
 

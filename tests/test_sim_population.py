@@ -177,13 +177,31 @@ def test_popularity_is_a_zipf_distribution(population: Population) -> None:
     assert top_decile > 0.5
 
 
-def test_online_flag_follows_the_category_rule(
+def test_online_merchant_share_matches_its_own_knob(
+    population: Population, config: dict[str, Any]
+) -> None:
+    """PLAN §4.3 wants ~35% of merchants to have no physical storefront."""
+    share = population.merchants["is_online"].mean()
+    assert share == pytest.approx(float(config["merchants"]["online_merchant_share"]), abs=0.05)
+
+
+def test_online_merchant_flag_is_independent_of_category_online_share(
     population: Population, categories: list[dict[str, Any]]
 ) -> None:
-    """is_online means online-only; omnichannel merchants roll per transaction."""
-    online_share = {c["name"]: float(c["online_share"]) for c in categories}
-    expected = population.merchants["category"].map(online_share) >= 0.95
-    assert (population.merchants["is_online"] == expected).all()
+    """The two are separate concerns and must not be derivable from each other.
+
+    ``online_share`` is the per-transaction channel probability used by legit.py; the
+    model feature is_online comes from the event channel (§5.2, feature 4). This column
+    is merchant reference data (§4.2) and nothing more.
+    """
+    merchants = population.merchants
+    online_share = merchants["category"].map(
+        {c["name"]: float(c["online_share"]) for c in categories}
+    )
+
+    # A category-threshold rule would reproduce the flag exactly. None may.
+    for threshold in (0.0, 0.5, 0.95, 1.0):
+        assert not ((online_share >= threshold) == merchants["is_online"]).all()
 
 
 def test_international_merchant_share(population: Population, config: dict[str, Any]) -> None:
@@ -331,6 +349,19 @@ def test_carrier_nat_is_a_small_pool_behind_many_accounts(
     assert links["ip"].nunique() == int(spec["n_ips"])
     share = links["account_id"].nunique() / len(population.accounts)
     assert share == pytest.approx(float(spec["account_share"]), abs=0.02)
+
+
+def test_office_ip_use_is_probabilistic(population: Population, config: dict[str, Any]) -> None:
+    """Affiliated accounts split weekday-daytime online activity with their home IP.
+
+    population.py only carries the probability; legit.py applies the weekday and
+    09:00-18:00 gate on top of it.
+    """
+    spec = config["ip_pools"]["office"]
+    links = population.account_ips[population.account_ips["ip_type"] == "office"]
+
+    assert np.allclose(links["usage_share"].to_numpy(), float(spec["usage_share"]))
+    assert 0.0 < float(spec["usage_share"]) < 1.0, "office use must not be all-or-nothing"
 
 
 def test_office_groups_stay_within_their_configured_size(

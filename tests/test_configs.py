@@ -170,6 +170,19 @@ def test_every_referenced_category_exists(name: str) -> None:
 
 
 @pytest.mark.parametrize("name", SIM_CONFIGS)
+def test_merchant_online_share_targets_the_plan_value(name: str) -> None:
+    """PLAN §4.3 asks for ~35% online merchants, as its own knob (not derived)."""
+    share = load_yaml(name)["merchants"]["online_merchant_share"]
+    assert 0.30 <= share <= 0.40
+
+
+@pytest.mark.parametrize("name", SIM_CONFIGS)
+def test_office_usage_share_is_probabilistic(name: str) -> None:
+    """A simulator design choice, not a PLAN value: office use must not be certain."""
+    assert 0.0 < load_yaml(name)["ip_pools"]["office"]["usage_share"] < 1.0
+
+
+@pytest.mark.parametrize("name", SIM_CONFIGS)
 def test_label_delay_is_fourteen_days(name: str) -> None:
     """The graph job may only seed from labels available before the snapshot (PLAN §4.6)."""
     assert load_yaml(name)["labels"]["delay_days"] == 14
