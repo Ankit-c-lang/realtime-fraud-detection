@@ -5,26 +5,26 @@ that task. Source of truth for *what* to build is `PLAN.md`; this file only trac
 
 - **Plan version:** v1 (2026-09-16) · **Started:** 2026-09-20
 - **Current phase:** Phase 0 — Environment and skeleton (PLAN §17, Phase 0)
-- **Overall:** 4 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 4 / 7
+- **Overall:** 6 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 6 / 7
 
 ---
 
 ## Currently working on
 
-**Phase 0 · Task 5 — Redis service (PLAN §12.2).**
-Add `docker-compose.yml` containing **only** the `redis` service (pin the exact image tag pulled),
-then `make redis-up` and confirm `docker compose exec redis redis-cli ping` prints `PONG`.
+**Phase 0 · Task 6 — CI workflow (PLAN §14).**
+Add `.github/workflows/ci.yml` with the `lint-unit` job only: checkout, setup-uv pinned to Python
+3.12, `uv sync --frozen --all-groups`, `ruff check`, `ruff format --check`,
+`pytest -m "not redis and not slow"`. Confirm it goes green on GitHub.
 
-Blocked on nothing.
+**Blocked:** needs the GitHub remote (task 2, below) before CI can run anywhere.
 
 ---
 
 ## Next up (in order)
 
-1. **P0.5** — `docker-compose.yml` with **only** the `redis` service; `make redis-up`; confirm `PONG` (see *Currently working on*).
-2. **P0.2** — `git init`, create the GitHub repo, push `main`.
-3. **P0.6** — `.github/workflows/ci.yml` (`lint-unit` job only); CI green on GitHub.
-4. Close Phase 0, tag `phase-0`, then start **Phase 1 (Simulator)**.
+1. **P0.2b** — create the GitHub repo and push `main` (needs the user: repo name and visibility).
+2. **P0.6** — `.github/workflows/ci.yml` (`lint-unit` job only); CI green on GitHub.
+3. Close Phase 0, tag `phase-0`, then start **Phase 1 (Simulator)** — `configs/` + `sim/population.py`.
 
 ---
 
@@ -55,6 +55,8 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-20 | 0 | `CLAUDE.md` created from PLAN §18.2 + this `PROGRESS.md` | `CLAUDE.md`, `PROGRESS.md` |
 | 2026-09-20 | 0 | Repo skeleton from §16: 49 stub modules, `pyproject.toml` (§15.3), `.python-version`, Makefile (§16.1), ignore files, `.env.example`, placeholder `README.md`, `src/fraud/config.py`, `tests/` | `make lint` clean, `make test` 8 passed |
 | 2026-09-20 | 0 | `uv lock` + `uv sync --all-groups` — 111 packages resolved, Python 3.12.3 | `uv.lock` committed |
+| 2026-09-20 | 0 | `git init` + first two commits (plan/context, then skeleton) | `git log`: 2369922, af2cc96 |
+| 2026-09-20 | 0 | `docker-compose.yml` with the `redis` service only, pinned to `redis:8.10.1-alpine`; container healthy | `docker compose exec redis redis-cli ping` → `PONG` |
 
 ---
 
@@ -66,10 +68,10 @@ before continuing — do not silently slip.
 ### Phase 0 — Environment and skeleton (Day 1 am, ~4 h, 2/10) — IN PROGRESS
 - [x] 1. Verify environment and VM allocation (§15.1)
 - [x] 7a. `CLAUDE.md` from §18.2
-- [ ] 2. `git init` + GitHub repo + clone/push; `PLAN.md` committed
+- [~] 2. `git init` done and `PLAN.md` committed; **GitHub repo + push still outstanding**
 - [x] 3. Skeleton from §16: empty modules w/ docstrings, `pyproject.toml` (§15.3), `.python-version`, Makefile stubs, `.gitignore`, `.dockerignore`, `.env.example`, `src/fraud/config.py`
 - [x] 4. `uv lock && uv sync --all-groups`
-- [ ] 5. `docker-compose.yml` with the `redis` service only; `make redis-up` → `PONG`
+- [x] 5. `docker-compose.yml` with the `redis` service only; `make redis-up` → `PONG`
 - [ ] 6. `.github/workflows/ci.yml` (`lint-unit`) + `tests/test_smoke.py`
 - [ ] 7b. Commit + push; `make setup && make lint && make test` green; tag `phase-0`
 
@@ -184,6 +186,9 @@ Record anything that departs from the plan, with the reason. Empty so far.
 | 2026-09-20 | Repo lives at `~/projects/...` not `~/code/...` | Existing layout on this VM | §15.2 |
 | 2026-09-20 | Makefile targets for unbuilt phases `exit 1` instead of printing only | A target that claims to build data must not exit 0 without doing it | §16.1 |
 | 2026-09-20 | Added `make help` (not in §16.1) and a placeholder `README.md` | `readme` is required by `pyproject.toml`, so the package cannot build without it; README is written properly in Phase 10 | §15.3, §17 |
+| 2026-09-20 | Redis pinned to `redis:8.10.1-alpine`, not the plan's `redis:8-alpine` | §15.3 requires exact image tags; `8-alpine` resolved to server 8.10.1 (identical digest). CI must use this same tag | §12.2, §14, §15.3 |
+| 2026-09-20 | Added `tests/test_redis_smoke.py` + a `redis_client` fixture in Phase 0, earlier than §13 schedules | `make test-redis` otherwise exits 5 with no tests collected, so the target was untestable. The fixture also guards DB 15 | §13 |
+| 2026-09-20 | Makefile test targets now export `TEST_REDIS_URL` (DB 15) instead of inheriting `REDIS_URL` (DB 0) | The global `export REDIS_URL` leaked DB 0 into tests, which would have flushed live scorer state in Phase 6 | §13, §16.1 |
 
 ---
 

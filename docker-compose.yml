@@ -1,0 +1,26 @@
+# Phase 0 holds only Redis. The application services (backfill, scorer, graph-refresh,
+# api, dashboard, replayer) and the shared x-app anchor arrive in Phase 9, PLAN §12.2.
+# There is no top-level `version:` key; Compose v2 no longer uses it.
+
+services:
+  redis:
+    # Pinned to the exact tag pulled on this VM (PLAN §15.3 pinning policy).
+    # redis:8-alpine resolved to server v8.10.1, digest bd999b5c...
+    # CI must use this same tag (PLAN §14).
+    image: redis:8.10.1-alpine
+    # Append-only persistence so state survives a container restart during a demo.
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - redis-data:/data
+    # Published for host-side commands and the redis-marked tests (PLAN §13).
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  redis-data: {}

@@ -4,6 +4,8 @@
 UV ?= uv
 RUN := $(UV) run
 REDIS_URL ?= redis://localhost:6379/0
+# Integration tests get their own database so they never flush live scorer state (PLAN §13).
+TEST_REDIS_URL ?= redis://localhost:6379/15
 V ?= v1
 export REDIS_URL
 
@@ -30,13 +32,13 @@ format:  ## Ruff auto-fix and format
 	$(RUN) ruff format .
 
 test:  ## Fast unit tests (no Redis, nothing slow)
-	$(RUN) pytest -m "not redis and not slow"
+	REDIS_URL=$(TEST_REDIS_URL) $(RUN) pytest -m "not redis and not slow"
 
 test-redis:  ## Integration tests that need a Redis server
-	$(RUN) pytest -m redis
+	REDIS_URL=$(TEST_REDIS_URL) $(RUN) pytest -m redis
 
 test-all:  ## The whole suite
-	$(RUN) pytest
+	REDIS_URL=$(TEST_REDIS_URL) $(RUN) pytest
 
 redis-up:  ## Start the Redis container
 	docker compose up -d redis
