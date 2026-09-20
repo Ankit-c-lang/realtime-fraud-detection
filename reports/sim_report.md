@@ -1,6 +1,6 @@
 # Simulator validation report
 
-Generated 2026-09-20 14:25 UTC by `python -m fraud.sim.checks`.
+Generated 2026-09-20 15:49 UTC by `python -m fraud.sim.checks`.
 Every number below comes from that command (PLAN §0.4).
 
 ## Run
@@ -16,7 +16,7 @@ Every number below comes from that command (PLAN §0.4).
 | Merchants | 2,000 |
 | Fraud rate | 1.691% |
 | Attacks | 275 across 45 rings |
-| Generation time | 78.5 s |
+| Generation time | 68.5 s |
 
 The sha256 above is what PLAN §4.8's freeze rule pins. It is recorded in every model's
 metadata, and metrics are never improved by editing the config behind it.
@@ -52,7 +52,7 @@ metadata, and metrics are never improved by editing the config behind it.
 | PASS | new legitimate accounts transact | §4.4 | 2,007 of 2,670 mid-simulation accounts are active |
 | PASS | legitimate micro-payment bursts exist | §4.4 | 649 accounts show a burst (~674 configured) |
 | PASS | low-friction merchants have honest customers | §4.4 | small digital purchases occur outside card-testing attacks |
-| PASS | same seed reproduces identical files (sim_tiny) | §4.8 | events sha256 `2e9858bbf3972789…` |
+| PASS | same seed reproduces identical files (sim_tiny) | §4.8 | events sha256 `691f6d0df50a14a4…` |
 
 ## Fraud by pattern
 

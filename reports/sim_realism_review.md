@@ -146,3 +146,34 @@ rule exists to prevent. The consequences are accepted and must be stated in the 
   graph features are *selected* by the model, how they rank in importance, and whether
   they hold up when behavioural features are ablated. If the honest answer is that they
   add nothing measurable on this dataset, that is what the README will say.
+
+
+---
+
+# Correction — `sim-v2-fix1` (2026-09-20)
+
+A defect introduced with the sim-v2 device work was found while measuring entity fan-out
+for §6.1, and the dataset was regenerated. **No simulator knob or realism assumption
+changed**, so the sim-v2 revision is not re-spent; `configs/sim.yaml` is byte-identical
+and still hashes to `4013268a3b4aeffef2e45faf855c5fc12e44d7febf3e41780aad4b4cd02a5f6b`.
+
+**The defect.** `next_device()` allocated an id and left registration to the caller. The
+spare-handset code never registered its devices, so `population.devices` omitted all
+22,000 of them, and `patterns.py`, which numbers its own devices from
+`len(population.devices)`, issued attacker devices the same ids as spares.
+
+**The impact on the committed data was nil, by luck.** Of 8,470 events on spare ids,
+8,126 were fraud and 344 legitimate, and no single id carried both. A different seed
+would have fused a traveller's handset with an attacker's device.
+
+**The fix** makes the allocator register what it allocates, so a caller cannot forget.
+Two regression tests now assert that every spare is registered, that attack device ids
+never overlap population ids, and that no event references an unregistered device.
+
+**Evidence the fix changed nothing but ids.** Regenerating produced the same 494,189
+events at the same 1.691% fraud rate, all 26 checks passed, and E1 and E2 returned
+identical metrics: E1 PR-AUC 0.4181 and E2 0.9973, to four decimal places. That is what
+confirms the collision had touched no rows.
+
+The `sim-v2` tag is left where it is as historical evidence. `sim-v2-fix1` marks the
+corrected generator.

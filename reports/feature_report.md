@@ -10,7 +10,7 @@ command.
 | Hot features | 30 |
 | Burn-in rows (excluded from training and metrics) | 72,868 |
 | Rows available to modelling | 421,321 |
-| Replay time | 77.77 s |
+| Replay time | 69.6 s |
 | Checkpoint | 2026-03-14 |
 
 ## Rows per split

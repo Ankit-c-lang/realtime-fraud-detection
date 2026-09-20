@@ -437,11 +437,19 @@ def _build_devices(
 
     counter = 0
 
-    def next_device(kind: str) -> tuple[str, str]:
+    def next_device(kind: str) -> str:
+        """Allocate a device id AND register it.
+
+        Registration used to be the caller's job, and a caller forgot: the spare
+        handsets were issued ids but never added to the registry, so patterns.py
+        started its own counter below them and handed attacker devices the same ids.
+        Allocating and registering together makes that impossible.
+        """
         nonlocal counter
         device_id = f"D{counter:07d}"
         counter += 1
-        return device_id, kind
+        registry.append((device_id, kind))
+        return device_id
 
     registry: list[tuple[str, str]] = []
     links: list[dict[str, Any]] = []
@@ -461,18 +469,15 @@ def _build_devices(
 
     for row in range(n):
         personal: list[tuple[str, np.datetime64, np.datetime64, float]] = []
-        primary, kind = next_device("personal")
-        registry.append((primary, kind))
+        primary = next_device("personal")
 
         if upgrades[row]:
             swap = max(upgrade_at[row], floor[row])
-            replacement, kind = next_device("personal")
-            registry.append((replacement, kind))
+            replacement = next_device("personal")
             personal.append((primary, floor[row], swap, 1.0))
             personal.append((replacement, swap, np.datetime64(end.to_datetime64(), "s"), 1.0))
         elif has_two[row]:
-            secondary, kind = next_device("personal")
-            registry.append((secondary, kind))
+            secondary = next_device("personal")
             stop = np.datetime64(end.to_datetime64(), "s")
             personal.append((primary, floor[row], stop, 1.0 - _SECOND_DEVICE_WEIGHT))
             personal.append((secondary, floor[row], stop, _SECOND_DEVICE_WEIGHT))
@@ -491,22 +496,18 @@ def _build_devices(
                 }
             )
 
-    household = _build_family_devices(
-        family_members, accounts, spec, start, end, next_device, registry
-    )
+    household = _build_family_devices(family_members, accounts, spec, start, end, next_device)
     links.extend(household)
 
     # sim-v2: legitimate accounts sharing one device with many others, which is the
     # band a fraud ring lives in. Family members are excluded so no account carries
     # two shared-device weightings.
     links.extend(
-        _build_shared_devices(
-            rng, spec, accounts, family_members, start, end, next_device, registry, links
-        )
+        _build_shared_devices(rng, spec, accounts, family_members, start, end, next_device, links)
     )
 
     spares = [
-        {"account_id": account_ids[row], "device_id": next_device("spare")[0]} for row in range(n)
+        {"account_id": account_ids[row], "device_id": next_device("spare")} for row in range(n)
     ]
 
     devices = pd.DataFrame(registry, columns=["device_id", "device_type"])
@@ -522,7 +523,6 @@ def _build_shared_devices(
     start: pd.Timestamp,
     end: pd.Timestamp,
     next_device: Any,
-    registry: list[tuple[str, str]],
     links: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     """Devices shared by 5-15 unrelated accounts (PLAN §4.8 sim-v2 revision).
@@ -556,8 +556,7 @@ def _build_shared_devices(
     while len(pool) >= low:
         size = int(rng.integers(low, min(high, len(pool)) + 1))
         members = [pool.pop() for _ in range(size)]
-        device_id, kind = next_device("shared")
-        registry.append((device_id, kind))
+        device_id = next_device("shared")
 
         for row in members:
             # Scale the account's own devices down so its weights still total 1.
@@ -609,7 +608,6 @@ def _build_family_devices(
     start: pd.Timestamp,
     end: pd.Timestamp,
     next_device: Any,
-    registry: list[tuple[str, str]],
 ) -> list[dict[str, Any]]:
     links: list[dict[str, Any]] = []
     account_ids = accounts["account_id"].to_numpy()
@@ -618,8 +616,7 @@ def _build_family_devices(
     stop = np.datetime64(end.to_datetime64(), "s")
 
     for members in family_of.dropna().groupby(family_of.dropna()).groups.values():
-        device_id, kind = next_device("family")
-        registry.append((device_id, kind))
+        device_id = next_device("family")
         for row in members:
             links.append(
                 {

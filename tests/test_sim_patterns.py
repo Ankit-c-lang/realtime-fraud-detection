@@ -116,6 +116,33 @@ def test_injection_is_deterministic(
     pd.testing.assert_frame_equal(run(), run())
 
 
+def test_attack_devices_never_reuse_a_population_device_id(
+    attacks: Attacks, population: Population
+) -> None:
+    """patterns.py numbers its devices from len(population.devices).
+
+    That only holds if every population device is registered. It once was not: the
+    spare handsets were issued ids without being registered, so attacker devices were
+    numbered on top of them. Nothing was corrupted by luck, but a different seed would
+    have fused a traveller's phone with an attacker's.
+    """
+    issued = set(population.devices["device_id"])
+    spares = set(population.spare_devices["device_id"])
+
+    assert spares <= issued, "spare devices are missing from the device registry"
+    assert not issued & set(attacks.devices["device_id"])
+    assert max(issued) < min(attacks.devices["device_id"])
+
+
+def test_every_device_in_use_is_registered(
+    attacks: Attacks, population: Population, legit: pd.DataFrame
+) -> None:
+    """No event may reference a device that no registry accounts for."""
+    known = set(population.devices["device_id"]) | set(attacks.devices["device_id"])
+    assert set(legit["device_id"]) <= known
+    assert set(attacks.events["device_id"]) <= known
+
+
 def test_new_actors_match_the_population_schema(attacks: Attacks, population: Population) -> None:
     """Ring mules are appended to the real tables, so the columns have to line up."""
     assert list(attacks.accounts.columns) == list(population.accounts.columns)

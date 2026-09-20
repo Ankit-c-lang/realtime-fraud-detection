@@ -4,7 +4,7 @@ Living status file. **Update it at the end of every completed task**, together w
 that task. Source of truth for *what* to build is `PLAN.md`; this file only tracks *where we are*.
 
 - **Plan version:** v1 (2026-09-16) · **Started:** 2026-09-20
-- **Current phase:** Phase 4 — Graph layer (PLAN §17, Phase 4) · Phases 0-3 complete · tags `phase-0`, `sim-v1`, `phase-2`, **`sim-v2`**
+- **Current phase:** Phase 4 — Graph layer (PLAN §17, Phase 4) · Phases 0-3 complete · tags `phase-0`, `sim-v1`, `phase-2`, `sim-v2`, **`sim-v2-fix1`**
 - **Phase 1 progress:** 8 / 8 ✅ — **simulator FROZEN, tagged `sim-v1`**
 - **Phase 2 progress:** 7 / 7 ✅ — tagged `phase-2`
 - **Phase 3 progress:** 6 / 6 ✅ (E3 ablation belongs to Phase 4)
@@ -14,26 +14,30 @@ that task. Source of truth for *what* to build is `PLAN.md`; this file only trac
 
 ## Currently working on
 
-**Phase 4 · Task 1 — set the graph fan-out caps (PLAN §6.1, prompt P4.1).**
-Measure the accounts-per-device and accounts-per-IP distributions over the **train**
-period, then set `device_cap` and `ip_cap` in a new `configs/graph.yaml`. The caps have
-to drop carrier NAT (hundreds of unrelated accounts behind one IP) while keeping offices
-and the sim-v2 widely shared devices, which are legitimate mid-size clusters.
+**Phase 4 · Task 1 — choose `device_cap` and `ip_cap` (PLAN §6.1, prompt P4.1).**
 
-Then `graph/projection.py` (the §6.1 SQL, with `ORDER BY` so Louvain is deterministic).
+The measurement is done and committed: **`reports/entity_fanout.md`**, 39 daily 30-day
+windows over train, 849,923 device pairs and 699,838 IP pairs, every entity labelled.
 
-**Context for the ablation:** sim-v2 is spent and E2 ring recall is 1.00, so E3 cannot
-show a recall gain. Report what it *can* show — whether the graph features are selected,
-where they rank in importance, and whether they survive ablating behavioural features —
-and say plainly in the README if they add nothing measurable here.
+**Waiting on you to set the two caps.** Nothing is chosen yet, deliberately. The tables
+show a clean corridor on each side:
 
-Blocked on nothing.
+- devices: `shared` maxes at 14 and `ring` at 15; `attacker` (card testing) sits at
+  p90 42, max 60
+- IPs: `office` maxes at 70; `nat` has a *median* of 114
+
+Note the ring/shared overlap on devices is total by design after sim-v2 — rings (max 15)
+and legitimate shared devices (max 14) occupy the same band, which is exactly what makes
+the graph structure, rather than a count, the thing that separates them.
+
+After the caps: `graph/projection.py` (the §6.1 SQL, with `ORDER BY` so Louvain is
+deterministic).
 
 ---
 
 ## Next up (in order)
 
-1. **P4.1** — fan-out measurement, `configs/graph.yaml`, `graph/projection.py` (see *Currently working on*).
+1. **P4.1b** — set the caps, write `configs/graph.yaml`, then `graph/projection.py` (see *Currently working on*).
 2. **P4.2** — `graph/algorithms.py`: degree, clustering, seeded Louvain, community aggregates, personalised PageRank with the 14-day label delay.
 3. **P4.3** — `graph/snapshots.py` (89 daily snapshots, log the runtime; over ~10 min means switch to weekly) and `graph/join.py` (the two-step point-in-time join).
 4. **P4.4** — **E3** on 36 features with parameter set P unchanged, plus the ablation table.
@@ -96,6 +100,8 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-20 | 3 | ⚠️ **E2 crosses the §4.8 threshold (>0.995); `sim-v2` decision pending** | `reports/sim_realism_review.md` |
 | 2026-09-20 | 3 | **`sim-v2` applied and frozen** (PLAN §4.8 one-time revision): widely shared devices, travel/VPN on a new device, tighter sprees. 26/26 checks pass; 494,189 events, 1.691% fraud | `reports/sim_realism_review.md`; sha256 `4013268a…` |
 | 2026-09-20 | 3 | Re-ran E1/E2 on valid only. **E1 0.6305 -> 0.4181** (precision 0.928 -> 0.622, FPR 6.75x) — the negatives genuinely overlap now. **E2 0.9995 -> 0.9973**, ring recall still 1.00 | `reports/experiments/` |
+| 2026-09-20 | 4 | `scripts/entity_fanout_stats.py` + `reports/entity_fanout.md`: fan-out over 39 daily 30-day train windows, every entity type labelled | 849,923 device / 699,838 IP (entity, window) pairs |
+| 2026-09-20 | 4 | **Bug fix `sim-v2-fix1`**: `next_device()` now registers what it allocates. Spares were unregistered, so attacker devices reused their ids | 0 rows were affected (proved); E1/E2 identical after regeneration; 2 regression tests |
 | 2026-09-20 | 1 | **SIMULATOR FROZEN — tagged `sim-v1`.** `configs/sim.yaml` sha256 `97404e57e5da143b1f1b47c11caac96d315ce5fe85da1f47feba5cda9976863f` matches the report and the run manifest | `git tag sim-v1`; CLAUDE.md invariant 11 |
 
 ---
@@ -282,6 +288,7 @@ again in either file.
 | 2026-09-20 | `splits.load` now also joins the raw `amount` from `events.parquet` | Value detection rate weights recall by money and the feature table only carries `log_amount`. `amount` travels with the row but is **not** a feature: `feature_matrix` still selects by the spec | §7.8 |
 | 2026-09-20 | **`sim-v2`: the one revision §4.8 allows, now spent.** Four config knobs — `devices.shared_device_share` (5-15 account groups), `travel.new_device_share`, `vpn.new_device_share`, `shopping_spree.tight_share` | E2 hit 0.9995 with literally zero legitimate overlap on three fraud shapes. After: 866 legit rows at `dev_accts_30d>=5` (was 0), 283 at `acct_cnt_5m>=5` (was 1). Legit `dev_accts_30d` now reaches 14 against a ring median of 4. **No sim-v3** | §4.8 |
 | 2026-09-20 | Two hard-negative tests rewritten for the new intent | They asserted the old too-clean behaviour: that every VPN session used an owned device, and that every shared device was a household one. Both are deliberately false under sim-v2. The replacements assert the *new* contract, including a new test that a legitimate device must reach the ring band | §4.4, §4.8 |
+| 2026-09-20 | `sim-v2-fix1`: device-id registration bug fixed and everything regenerated | `next_device()` allocated an id but left registration to the caller, and the spare-handset code forgot, so `patterns.py` numbered attacker devices on top of spare ids. **Correctness only — no knob or realism assumption changed**, `sim.yaml` is byte-identical, so the §4.8 revision is not re-spent. Committed data was unaffected by luck (0 ids carried both legit and fraud events); a different seed would have fused a traveller's phone with an attacker's. Confirmed harmless by regenerating: same 494,189 events, same 1.691% fraud, E1 0.4181 and E2 0.9973 unchanged to 4 dp | §6.1 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---

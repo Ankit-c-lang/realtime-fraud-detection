@@ -55,7 +55,7 @@ All Python targets run through `uv run`.
 8. Scorer: the per-event commit is idempotent; XACK only after the sink flush (§9.2, §9.3).
 9. The API's /score never writes state (§10).
 10. Every number in README or CV comes from reports/ (§0.4).
-11. **configs/sim.yaml is FROZEN at tag `sim-v2` (2026-09-20), sha256 `4013268a3b4aeffef2e45faf855c5fc12e44d7febf3e41780aad4b4cd02a5f6b`.**
+11. **configs/sim.yaml is FROZEN at tag `sim-v2-fix1` (2026-09-20), sha256 `4013268a3b4aeffef2e45faf855c5fc12e44d7febf3e41780aad4b4cd02a5f6b`.**
     Do not edit it, configs/sim_tiny.yaml, configs/categories.yaml, configs/cities.csv or
     configs/splits.yaml, and do not change simulator behaviour. PLAN §4.8 permits exactly one
     revision and **it has been used**: sim-v2 widened the hard negatives after E2 hit 0.9995

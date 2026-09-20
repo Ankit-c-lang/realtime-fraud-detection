@@ -13,13 +13,13 @@
       "subsample": 0.7
     },
     "scale_pos_weight": 1,
-    "search_seconds": 113.2,
+    "search_seconds": 111.2,
     "train_rows": 213215
   },
   "experiment_id": "E2",
   "feature_spec_version": "fs1",
-  "generated_at": "2026-09-20T14:29:20+00:00",
-  "git_commit": "6560d20",
+  "generated_at": "2026-09-20T15:52:32+00:00",
+  "git_commit": "b34b4a4",
   "metrics": {
     "alert_rate": 0.013926359101116823,
     "alerts": 924,
