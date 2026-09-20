@@ -173,12 +173,42 @@ def evaluate(
     fraud_type: np.ndarray | None = None,
     budget: float | None = None,
 ) -> Evaluation:
-    """The full §7.8 picture for one model on one split."""
+    """The full §7.8 picture, at the best threshold inside the alert budget."""
+    point = operating_point(y_true, scores, budget)
+    return evaluate_at(y_true, scores, point.threshold, amounts=amounts, fraud_type=fraud_type)
+
+
+def evaluate_at(
+    y_true: np.ndarray,
+    scores: np.ndarray,
+    threshold: float,
+    *,
+    amounts: np.ndarray | None = None,
+    fraud_type: np.ndarray | None = None,
+) -> Evaluation:
+    """The same picture at a threshold someone else chose.
+
+    The rules baseline needs this: rules fire where they fire, and forcing them through
+    a budget-constrained search would flatter them by hiding how much they over-alert.
+    """
     y_true = np.asarray(y_true)
     scores = np.asarray(scores, dtype=float)
+    flagged = scores >= threshold
 
-    point = operating_point(y_true, scores, budget)
-    flagged = scores >= point.threshold
+    alerts = int(flagged.sum())
+    hits = int(y_true[flagged].sum())
+    positives = int(y_true.sum())
+    precision = hits / alerts if alerts else 0.0
+    recall = hits / positives if positives else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+    point = OperatingPoint(
+        float(threshold),
+        precision,
+        recall,
+        f1,
+        alerts / len(scores) if len(scores) else 0.0,
+        alerts,
+    )
 
     negatives = int((y_true == 0).sum())
     false_alerts = int(((y_true == 0) & flagged).sum())

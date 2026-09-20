@@ -30,6 +30,9 @@ BURN_IN_SPLIT: Final[str] = "burn_in"
 ALLOW_TEST_ENV: Final[str] = "ALLOW_TEST"
 
 LABEL_COLUMNS: Final[tuple[str, ...]] = ("is_fraud", "fraud_type", "attack_id", "ring_id")
+# Value detection rate weights recall by money, so the raw amount has to travel with the
+# row. It is NOT a feature: the model sees log_amount from the spec (§7.8).
+EVENT_COLUMNS: Final[tuple[str, ...]] = ("txn_id", "amount")
 TRAINABLE_SPLITS: Final[tuple[str, ...]] = ("train", "early_stop", "valid")
 
 
@@ -87,15 +90,7 @@ def load(
     if split not in known:
         raise KeyError(f"unknown split {split!r}; configs/splits.yaml defines {sorted(known)}")
 
-    settings = Settings.from_env()
-    features = pd.read_parquet(features_path or settings.features_dir / "hot_features.parquet")
-    labels = pd.read_parquet(
-        labels_path or settings.raw_dir / "labels.parquet",
-        columns=["txn_id", *LABEL_COLUMNS],
-    )
-
-    frame = features.merge(labels, on="txn_id", validate="one_to_one")
-    return _select(frame, split)
+    return _select(_joined(features_path, labels_path), split)
 
 
 def load_many(splits: list[str], **kwargs: Path | None) -> dict[str, pd.DataFrame]:
@@ -103,16 +98,25 @@ def load_many(splits: list[str], **kwargs: Path | None) -> dict[str, pd.DataFram
     for split in splits:
         _guard(split)
 
+    frame = _joined(kwargs.get("features_path"), kwargs.get("labels_path"))
+    return {split: _select(frame, split) for split in splits}
+
+
+def _joined(features_path: Path | None, labels_path: Path | None) -> pd.DataFrame:
+    """Features, labels and the raw amount, joined once."""
     settings = Settings.from_env()
-    features = pd.read_parquet(
-        kwargs.get("features_path") or settings.features_dir / "hot_features.parquet"
-    )
+    features = pd.read_parquet(features_path or settings.features_dir / "hot_features.parquet")
     labels = pd.read_parquet(
-        kwargs.get("labels_path") or settings.raw_dir / "labels.parquet",
+        labels_path or settings.raw_dir / "labels.parquet",
         columns=["txn_id", *LABEL_COLUMNS],
     )
     frame = features.merge(labels, on="txn_id", validate="one_to_one")
-    return {split: _select(frame, split) for split in splits}
+
+    events = settings.raw_dir / "events.parquet"
+    if events.is_file():
+        amounts = pd.read_parquet(events, columns=list(EVENT_COLUMNS))
+        frame = frame.merge(amounts, on="txn_id", how="left", validate="one_to_one")
+    return frame
 
 
 def _select(frame: pd.DataFrame, split: str) -> pd.DataFrame:

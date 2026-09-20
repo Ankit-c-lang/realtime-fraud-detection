@@ -15,8 +15,18 @@ hold:
   min_alerts: 50
 
 rules:
-  # R1-R4, the reference point ML has to beat (PLAN §7.3).
-  r1_velocity: {acct_cnt_5m: 5}
-  r2_card_testing: {acct_small_1h: 4, acct_declines_1h: 3}
-  r3_ato: {geo_speed_kmh: 900.0, new_device: 1}
-  r4_fanout: {dev_accts_1h: 5}
+  # R1-R4 exactly as PLAN §7.3 defines them. This is the reference point ML has to
+  # beat, so a deliberately weak baseline would flatter every model that follows.
+  # May be tuned with a small grid on TRAIN only; the chosen values are recorded here.
+  r1_velocity:
+    acct_cnt_5m: 5
+  r2_ato:
+    geo_speed_kmh: 900.0
+    new_device: 1
+  r3_card_testing:
+    dev_accts_1h: 5
+    acct_small_1h: 3
+    acct_declines_1h: 2
+  r4_ring:
+    dev_accts_30d: 3
+    account_age_days: 30

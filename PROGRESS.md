@@ -7,21 +7,24 @@ that task. Source of truth for *what* to build is `PLAN.md`; this file only trac
 - **Current phase:** Phase 3 — Splits, baselines, XGBoost (PLAN §17, Phase 3) · Phases 0-2 complete, tagged `phase-0`, `sim-v1`, `phase-2`
 - **Phase 1 progress:** 8 / 8 ✅ — **simulator FROZEN, tagged `sim-v1`**
 - **Phase 2 progress:** 7 / 7 ✅ — tagged `phase-2`
-- **Phase 3 progress:** 2 / 6 tasks
-- **Overall:** 23 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Phase 3 progress:** 3 / 6 tasks
+- **Overall:** 24 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Phase 3 · Task 3 — `src/fraud/modeling/rules.py` (PLAN §7.3, prompt P3.2).**
-The R1-R4 rules baseline, evaluated on **valid** as experiment **E1**. Thresholds are
-already in `configs/model.yaml`: R1 velocity (`acct_cnt_5m >= 5`), R2 card testing
-(`acct_small_1h >= 4` and `acct_declines_1h >= 3`), R3 ATO (`geo_speed_kmh > 900` and
-`new_device`), R4 fan-out (`dev_accts_1h >= 5`).
+**Phase 3 · Task 4 — `src/fraud/modeling/train_xgb.py` (PLAN §7.4, prompt P3.3).**
+XGBoost on the 30 hot features: a 20-config random search, fit on **train**, early-stopped
+on **early_stop**, selected on **valid** -> experiment **E2**. Save the winning parameter
+set P; Phase 4 reuses it unchanged for E3 so the graph ablation compares like with like.
 
-This is the reference point XGBoost has to beat. A weak baseline makes any model look
-good, which is why §7.3 replaced "XGBoost on raw columns" with real rules.
+No `scale_pos_weight` (§3.8: it distorts probabilities that later get blended), native
+categorical for `merchant_category`, `hist` tree method, CPU only.
+
+**🚩 This is the Day-5 checkpoint.** E2 must beat E1 (PR-AUC 0.6305, recall 0.673 at a
+1.04% alert rate). If it does not, investigate before going further. If validation PR-AUC
+exceeds 0.995, that triggers the one-time `sim-v2` rule in §4.8 — report it, do not act.
 
 Blocked on nothing.
 
@@ -29,10 +32,9 @@ Blocked on nothing.
 
 ## Next up (in order)
 
-1. **P3.2** — `modeling/rules.py` + `tests/test_rules.py`, experiment **E1** on valid (see *Currently working on*).
-2. **P3.3** — `modeling/train_xgb.py`: 20-config random search on the 30 hot features, fit on train, early-stop on `early_stop`, select on valid -> **E2**. Save parameter set P.
-3. **P3.4** — `modeling/experiments.py` writing `reports/experiments/E*.json`, and `make experiments`.
-4. **🚩 CHECKPOINT: E2 must beat E1** on PR-AUC and recall at budget. If validation PR-AUC exceeds 0.995 that triggers the one-time `sim-v2` rule (§4.8) — report it, do not act on it.
+1. **P3.3** — `modeling/train_xgb.py` -> **E2** (see *Currently working on*).
+2. **P3.4** — wire `make experiments` to run E1 and E2 together; `test_training_smoke.py` part 1.
+3. Close Phase 3, then **Phase 4** — the graph layer (§6): measure device/IP fan-out to set the caps, `projection.py`, `algorithms.py`, `snapshots.py`, `join.py`, and the **E3 ablation**.
 
 ---
 
@@ -85,6 +87,7 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-20 | 2 | **Phase 2 complete — tagged `phase-2`** | 227 fast / 235 full tests green |
 | 2026-09-20 | 3 | `modeling/splits.py` (the only split loader, `ALLOW_TEST` lock) + `configs/model.yaml` | `tests/test_splits.py`, 14 tests; train 213,470 / early_stop 38,580 / valid 66,558 rows |
 | 2026-09-20 | 3 | `modeling/metrics.py`: PR-AUC, budget-constrained operating point, HOLD threshold, per-pattern recall, value detection rate | `tests/test_metrics.py`, 19 tests |
+| 2026-09-20 | 3 | `modeling/rules.py` + `experiments.py`; **E1 on valid**: PR-AUC 0.6305, P 0.928, R 0.673, alerts 1.04%, VDR 0.272 | `reports/experiments/E1.json`; `tests/test_rules.py`, 18 tests |
 | 2026-09-20 | 1 | **SIMULATOR FROZEN — tagged `sim-v1`.** `configs/sim.yaml` sha256 `97404e57e5da143b1f1b47c11caac96d315ce5fe85da1f47feba5cda9976863f` matches the report and the run manifest | `git tag sim-v1`; CLAUDE.md invariant 11 |
 
 ---
@@ -128,7 +131,7 @@ before continuing — do not silently slip.
 ### Phase 3 — Splits, baselines, XGBoost (Day 5 → Day 6 am, ~8 h, 4/10) — IN PROGRESS
 - [x] 1. `modeling/splits.py` (burn-in excluded, test behind `ALLOW_TEST`)
 - [x] 2. `modeling/metrics.py` (PR-AUC, capacity operating point, per-pattern recall, VDR, FPR)
-- [ ] 3. `modeling/rules.py` — R1-R4 → **E1**
+- [x] 3. `modeling/rules.py` — R1-R4 → **E1**
 - [ ] 4. `modeling/train_xgb.py` — 20-config random search on hot features → **E2**, save param set P
 - [ ] 5. `modeling/experiments.py` — writes `reports/experiments/E*.json`
 - [ ] 6. `test_splits.py`, `test_metrics.py`, `test_rules.py`, `test_training_smoke.py` (part 1)
@@ -266,6 +269,9 @@ again in either file.
 | 2026-09-20 | The replay peaks at **2.1 GB RSS** on the full dataset | It accumulates one dict per event before building the frame. Comfortable on a 7.7 GB VM but the largest memory user so far. If Phase 4's graph work pushes the total, stream the output in batches instead | §5.5 |
 | 2026-09-20 | The split guard is `allow_test_enabled()` and the exception is `SplitLockedError`, not `test_*` / `Test*` | pytest collects anything so named as a test case or class and warns. A guard that silently becomes a test is a guard nobody is checking | §7.11 |
 | 2026-09-20 | `configs/model.yaml` created (alert budget, HOLD bar, rule thresholds) | Listed in §16; holds the §7.7 decision-policy values. Like `features.yaml` it governs modelling rather than the data, so it sits outside the sim-v1 freeze | §7.3, §7.7, §16 |
+| 2026-09-20 | `configs/model.yaml` rules corrected to match §7.3 exactly | The first draft had R2-R4 wrong (it merged the ATO and fan-out rules and dropped the ring rule). §7.3 is: R1 `acct_cnt_5m>=5`; R2 `geo_speed_kmh>=900 AND new_device`; R3 `dev_accts_1h>=5 OR (acct_small_1h>=3 AND acct_declines_1h>=2)`; R4 `dev_accts_30d>=3 AND account_age_days<30` | §7.3 |
+| 2026-09-20 | E1 is reported where the rules fire, not at a budget-constrained threshold | Rules have no threshold to turn down at serving time. Forcing them through the operating-point search would hide how much they over-alert, which is half of what the baseline is for. `metrics.evaluate_at` was added for this | §7.3, §7.7 |
+| 2026-09-20 | `splits.load` now also joins the raw `amount` from `events.parquet` | Value detection rate weights recall by money and the feature table only carries `log_amount`. `amount` travels with the row but is **not** a feature: `feature_matrix` still selects by the spec | §7.8 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---
