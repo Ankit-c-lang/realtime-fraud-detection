@@ -17,7 +17,7 @@ from typing import Any
 
 import pandas as pd
 
-from fraud.config import PROJECT_ROOT
+from fraud.config import PROJECT_ROOT, load_yaml
 from fraud.features.spec import FEATURE_SPEC_VERSION
 from fraud.modeling.metrics import Evaluation
 
@@ -164,6 +164,113 @@ def run_e2(
     return experiment, result.best.params
 
 
+def run_e3(
+    train: pd.DataFrame,
+    early_stop: pd.DataFrame,
+    valid: pd.DataFrame,
+    params: dict[str, Any],
+    *,
+    n_jobs: int = -1,
+) -> tuple[Experiment, dict[str, Any]]:
+    """E3: XGBoost on all 36 features, using E2's parameter set unchanged (PLAN §7.9).
+
+    Reusing the parameters is what makes this an ablation rather than a comparison of two
+    searches: any difference is the graph, not a luckier hyperparameter draw.
+    """
+    from fraud.features.spec import WARM_FEATURE_NAMES
+    from fraud.modeling import train_xgb
+    from fraud.modeling.metrics import evaluate
+    from fraud.modeling.splits import target
+
+    model = train_xgb.fit(train, early_stop, params, warm=True, n_jobs=n_jobs)
+    scores = train_xgb.predict(model, valid, warm=True)
+    evaluation = evaluate(
+        target(valid).to_numpy(),
+        scores,
+        amounts=valid["amount"].to_numpy() if "amount" in valid.columns else None,
+        fraud_type=valid["fraud_type"].to_numpy(),
+    )
+
+    columns = list(train_xgb.as_model_input(train, warm=True).columns)
+    importance = dict(zip(columns, (float(v) for v in model.feature_importances_), strict=True))
+    ranked = sorted(importance, key=lambda name: importance[name], reverse=True)
+    warm_ranks = {name: ranked.index(name) + 1 for name in WARM_FEATURE_NAMES}
+
+    experiment = Experiment(
+        experiment_id="E3",
+        name="XGBoost, 36 features (hot + graph)",
+        split="valid",
+        evaluation=evaluation,
+        rows=len(valid),
+        details={
+            "params": params,
+            "params_source": "E2, unchanged, so the ablation measures the graph",
+            "best_iteration": int(getattr(model, "best_iteration", 0) or 0),
+            "importance": {name: round(importance[name], 5) for name in ranked[:12]},
+            "warm_feature_ranks": warm_ranks,
+            "warm_importance_total": round(sum(importance[name] for name in WARM_FEATURE_NAMES), 5),
+        },
+    )
+    return experiment, importance
+
+
+def run_graph_only(
+    train: pd.DataFrame,
+    early_stop: pd.DataFrame,
+    valid: pd.DataFrame,
+    params: dict[str, Any],
+    *,
+    n_jobs: int = -1,
+) -> Experiment:
+    """The graph features alone, with every behavioural feature ablated.
+
+    E2 already catches every ring, so E3 cannot show a recall gain. This asks the
+    question that is still open: how much of the ring pattern do the six graph features
+    carry on their own?
+    """
+    from xgboost import XGBClassifier
+
+    from fraud.features.spec import WARM_FEATURE_NAMES
+    from fraud.modeling.metrics import evaluate
+    from fraud.modeling.splits import target
+
+    fixed = dict(load_yaml("model")["xgboost"]["fixed"])
+    fixed.pop("enable_categorical", None)
+    columns = list(WARM_FEATURE_NAMES)
+
+    model = XGBClassifier(**fixed, **params, n_jobs=n_jobs)
+    model.fit(
+        train[columns],
+        target(train),
+        eval_set=[(early_stop[columns], target(early_stop))],
+        verbose=False,
+    )
+    scores = model.predict_proba(valid[columns])[:, 1]
+    evaluation = evaluate(
+        target(valid).to_numpy(),
+        scores,
+        amounts=valid["amount"].to_numpy() if "amount" in valid.columns else None,
+        fraud_type=valid["fraud_type"].to_numpy(),
+    )
+
+    return Experiment(
+        experiment_id="E3b",
+        name="Graph features only (6), behavioural features ablated",
+        split="valid",
+        evaluation=evaluation,
+        rows=len(valid),
+        details={
+            "features": columns,
+            "params": params,
+            "note": (
+                "Not a candidate model. It isolates how much of each pattern the graph "
+                "carries by itself, which is the question E3 cannot answer while E2 "
+                "already catches every ring."
+            ),
+        },
+    )
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run the development experiments on valid (PLAN §7.9)."""
     import argparse
@@ -172,13 +279,17 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(description="Run experiments E1-E2 (PLAN §7.9).")
     parser.add_argument("--only", nargs="*", default=None, help="subset, e.g. --only E1")
+    parser.add_argument("--warm", action="store_true", help="also run E3 and E3b")
     parser.add_argument("--jobs", type=int, default=-1, help="XGBoost n_jobs")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     wanted = set(args.only) if args.only else {"E1", "E2"}
+    if args.warm:
+        wanted |= {"E3", "E3b"}
+    warm = bool({"E3", "E3b"} & wanted)
 
-    frames = load_many(["train", "early_stop", "valid"])
+    frames = load_many(["train", "early_stop", "valid"], warm=warm)
     logger.info(
         "train %s / early_stop %s / valid %s rows",
         f"{len(frames['train']):,}",
@@ -187,12 +298,25 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     results: dict[str, Experiment] = {}
+    params: dict[str, Any] | None = None
     if "E1" in wanted:
         results["E1"] = run_e1(frames["valid"])
     if "E2" in wanted:
-        results["E2"], _ = run_e2(
+        results["E2"], params = run_e2(
             frames["train"], frames["early_stop"], frames["valid"], n_jobs=args.jobs
         )
+    if {"E3", "E3b"} & wanted:
+        if params is None:
+            params = read("E2")["details"]["params"]
+            logger.info("reusing E2 parameter set from disk: %s", params)
+        if "E3" in wanted:
+            results["E3"], _ = run_e3(
+                frames["train"], frames["early_stop"], frames["valid"], params, n_jobs=args.jobs
+            )
+        if "E3b" in wanted:
+            results["E3b"] = run_graph_only(
+                frames["train"], frames["early_stop"], frames["valid"], params, n_jobs=args.jobs
+            )
 
     for experiment in results.values():
         write(experiment)
@@ -200,7 +324,30 @@ def main(argv: list[str] | None = None) -> int:
 
     if {"E1", "E2"} <= results.keys():
         _compare(results["E1"], results["E2"])
+    if {"E2", "E3"} <= results.keys():
+        _ablation(results["E2"], results["E3"])
     return 0
+
+
+def _ablation(hot: Experiment, warm: Experiment) -> None:
+    """PLAN §7.9: E3 vs E2 is the graph ablation, reported per pattern."""
+    logger.info(
+        "E3 - E2: PR-AUC %+.4f, recall %+.4f, precision %+.4f",
+        warm.evaluation.pr_auc - hot.evaluation.pr_auc,
+        warm.evaluation.recall - hot.evaluation.recall,
+        warm.evaluation.precision - hot.evaluation.precision,
+    )
+    for pattern in sorted(hot.evaluation.recall_by_pattern):
+        before = hot.evaluation.recall_by_pattern[pattern]
+        after = warm.evaluation.recall_by_pattern.get(pattern, 0.0)
+        logger.info("  %-13s recall %.3f -> %.3f (%+.3f)", pattern, before, after, after - before)
+
+    ranks = warm.details.get("warm_feature_ranks", {})
+    logger.info(
+        "graph features rank %s of 36; combined importance %.3f",
+        sorted(ranks.values()),
+        warm.details.get("warm_importance_total", 0.0),
+    )
 
 
 def _compare(baseline: Experiment, model: Experiment) -> None:

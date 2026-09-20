@@ -8,38 +8,28 @@ that task. Source of truth for *what* to build is `PLAN.md`; this file only trac
 - **Phase 1 progress:** 8 / 8 ✅ — **simulator FROZEN, tagged `sim-v1`**
 - **Phase 2 progress:** 7 / 7 ✅ — tagged `phase-2`
 - **Phase 3 progress:** 6 / 6 ✅ (E3 ablation belongs to Phase 4)
-- **Overall:** 32 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Overall:** 34 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Phase 4 · Task 4 — experiment E3, the graph ablation (PLAN §7.9, prompt P4.4).**
-Train XGBoost on all 36 features using **parameter set P unchanged** from E2, so the
-comparison measures the graph and not a luckier hyperparameter draw. Then the ablation
-table: E3 vs E2, overall and per pattern.
+**Phase 5 · Task 1 — `src/fraud/modeling/iforest.py` (PLAN §7.5, prompt P5.1).**
+Isolation Forest fitted on **train rows only**, label-free (leakage rule L6). Store the
+score quantiles and feature statistics so an online score maps to the same percentile the
+offline one did. Never fit on valid or test.
 
-**Set expectations honestly.** E2 already catches 100% of rings, so E3 cannot show a
-recall gain — that headroom was gone before sim-v2 and the revision is spent. What E3 can
-show, and what the README will report:
+Then `blend.py`: the four `XGB_-k` models and the grid over `w`, with `w*` chosen by
+leave-one-pattern-out (§7.6), plus the fallback if `w*` collapses to 1.0.
 
-- whether the graph features are *selected* by the model at all, and where they rank;
-- how much they separate rings on their own. In the training table the signal is strong:
-  ring `community_young_share` averages 0.500 against 0.003 for legitimate rows, and
-  `graph_degree` 11.6 against 0.68, with 99.6% of ring rows carrying a non-default
-  position;
-- whether rings survive ablating the behavioural features that currently catch them.
-
-If the honest conclusion is that the graph adds nothing measurable on top, that is what
-gets written down.
-
-Blocked on nothing.
+Blocked on nothing. Phase 4 is complete: E3 and the ablation are in
+`reports/graph_ablation.md`.
 
 ---
 
 ## Next up (in order)
 
-1. **P4.4** — E3 on 36 features with parameter set P, plus the ablation table (see *Currently working on*).
+1. **P5.1** — `modeling/iforest.py` + `blend.py` with the LOPO weight (see *Currently working on*).
 2. **P4.2** — `graph/algorithms.py`: degree, clustering, seeded Louvain, community aggregates, personalised PageRank with the 14-day label delay.
 3. **P4.3** — `graph/snapshots.py` (89 daily snapshots, log the runtime; over ~10 min means switch to weekly) and `graph/join.py` (the two-step point-in-time join).
 4. **P4.4** — **E3** on 36 features with parameter set P unchanged, plus the ablation table.
@@ -109,6 +99,10 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-20 | 4 | Real snapshot at 2026-02-20: 2,614 nodes, 6,143 edges, 642 communities, 320 seeds in 1.6 s. **Clustering mean 0.794, non-zero on 82%** | confirms the §1 bipartite correction |
 | 2026-09-20 | 4 | `graph/snapshots.py` + `graph/join.py` + `make graph`: **89 snapshots in 104.5 s** (slowest 1.34 s), 533-2,653 nodes, 0-370 seeds | `data/graph/offline/`, `calendar.parquet` |
 | 2026-09-20 | 4 | `training_table.parquet`: 494,189 rows, all 36 features, 0 NaN, 12.6% with a non-default graph position | `tests/test_asof_join.py`, 12 tests |
+| 2026-09-20 | 4 | **E3** (36 features, E2's params unchanged): PR-AUC 0.9973, ring recall 1.00 — **identical to E2 to 4 dp**, no measurable gain | `reports/experiments/E3.json` |
+| 2026-09-20 | 4 | **E3b** (6 graph features only, behaviour ablated): ring recall **1.00 at precision 1.000**, and **0.00 on every other pattern** | `reports/experiments/E3b.json` |
+| 2026-09-20 | 4 | Graph features take **50.1% of total importance**; `community_shared_devices` ranks **#1 of 36** | `reports/graph_ablation.md` |
+| 2026-09-20 | 4 | **Phase 4 complete** | 335 tests green |
 | 2026-09-20 | 1 | **SIMULATOR FROZEN — tagged `sim-v1`.** `configs/sim.yaml` sha256 `97404e57e5da143b1f1b47c11caac96d315ce5fe85da1f47feba5cda9976863f` matches the report and the run manifest | `git tag sim-v1`; CLAUDE.md invariant 11 |
 
 ---
@@ -158,17 +152,17 @@ before continuing — do not silently slip.
 - [x] 6. `test_splits.py`, `test_metrics.py`, `test_rules.py`, `test_training_smoke.py` (part 1)
 - **🚩 CHECKPOINT (end of Day 5): E2 on valid exists.** E2 must beat E1 on PR-AUC and recall@budget.
 
-### Phase 4 — Graph layer (Day 6 pm → Day 7, ~14 h, 6/10)
+### Phase 4 — Graph layer (Day 6 pm → Day 7, ~14 h, 6/10) — ✅ COMPLETE (2026-09-20)
 - [x] 1. Measure accounts-per-device / per-IP on train; set `device_cap`, `ip_cap` in `graph.yaml`
 - [x] 2. `graph/projection.py` (§6.1 SQL, with `ORDER BY`)
 - [x] 3. `graph/algorithms.py` — degree, clustering, seeded Louvain, community aggregates, personalized PageRank w/ label delay
 - [x] 4. `graph/snapshots.py` — daily offline snapshots + `calendar.parquet`
 - [x] 5. `graph/join.py` — two-step point-in-time join → `training_table.parquet`
-- [ ] 6. **E3** (36 features, param set P) + ablation vs E2
-- [ ] 7. `test_graph_*`, `test_asof_join.py`
+- [x] 6. **E3** (36 features, param set P) + ablation vs E2
+- [x] 7. `test_graph_*`, `test_asof_join.py`
 - **Gate:** 89 snapshots < ~10 min (else weekly + document); E3 ring recall clearly above E2
 
-### Phase 5 — Isolation Forest, blend, explanations, artifacts (Day 8, ~8 h, 5/10)
+### Phase 5 — Isolation Forest, blend, explanations, artifacts (Day 8, ~8 h, 5/10) — IN PROGRESS
 - [ ] 1. `modeling/iforest.py` — fit on train only, label-free
 - [ ] 2. `modeling/blend.py` — four `XGB_-k` models, grid over `w`, pick `w*` (§7.6) + fallback
 - [ ] 3. `modeling/decisions.py` — REVIEW / HOLD thresholds on valid
@@ -298,6 +292,7 @@ again in either file.
 | 2026-09-20 | `sim-v2-fix1`: device-id registration bug fixed and everything regenerated | `next_device()` allocated an id but left registration to the caller, and the spare-handset code forgot, so `patterns.py` numbered attacker devices on top of spare ids. **Correctness only — no knob or realism assumption changed**, `sim.yaml` is byte-identical, so the §4.8 revision is not re-spent. Committed data was unaffected by luck (0 ids carried both legit and fraud events); a different seed would have fused a traveller's phone with an attacker's. Confirmed harmless by regenerating: same 494,189 events, same 1.691% fraud, E1 0.4181 and E2 0.9973 unchanged to 4 dp | §6.1 |
 | 2026-09-20 | Caps set to `device_cap: 16`, `ip_cap: 18` — §6.1's own placeholders, kept after reviewing the measured distributions | §6.1 also suggests the 99.5th percentile, which on this data is **4** for devices. That would erase the rings the graph exists to find, since a ring puts 6-15 accounts on a device. 16 sits above rings (max 15) and sim-v2 shared devices (max 14) and below card-testing devices (p90 42). 18 keeps ring IPs (max 14) and drops carrier NAT (median 114), VPN (max 58) and offices (median 27) — §6.1 names big offices as something the cap *should* drop, since an office IP fuses colleagues into a ring-shaped cluster | §6.1 |
 | 2026-09-20 | `ppr_risk` is ~1e-5 rather than exactly 0 for accounts the seeds cannot reach | Power iteration starts from a uniform vector and stops at the default tolerance. Five orders of magnitude below seeded values, so it cannot move a tree split; forcing it to zero would cost iterations for nothing. Documented in `algorithms.py` and asserted as a ratio, not as zero | §6.3 |
+| 2026-09-20 | **The graph ablation shows no recall gain, and that is the reported result** | E2 already reaches ring recall 1.00, so E3 has no headroom. E3 matches E2 to 4 dp. The ablation instead reports two things it *can* establish: the graph features take 50.1% of importance with `community_shared_devices` ranked #1 of 36, and alone (E3b) they catch 100% of rings at 100% precision and 0% of every other pattern. The README will say the features are redundant on this dataset, not useless, and will not claim a delta the evidence does not support | §7.9 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---

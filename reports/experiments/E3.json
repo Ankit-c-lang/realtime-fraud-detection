@@ -1,0 +1,67 @@
+{
+  "details": {
+    "best_iteration": 316,
+    "importance": {
+      "account_age_days": 0.02038,
+      "acct_declines_1h": 0.079,
+      "acct_small_1h": 0.01122,
+      "community_shared_devices": 0.46944,
+      "dev_accts_1h": 0.11662,
+      "dev_accts_30d": 0.05356,
+      "geo_speed_kmh": 0.01079,
+      "graph_clustering": 0.01086,
+      "ip_accts_1h": 0.03787,
+      "is_international": 0.06193,
+      "is_online": 0.02683,
+      "new_city": 0.01762
+    },
+    "params": {
+      "colsample_bytree": 0.6,
+      "learning_rate": 0.1,
+      "max_depth": 4,
+      "min_child_weight": 5,
+      "reg_lambda": 5,
+      "subsample": 0.7
+    },
+    "params_source": "E2, unchanged, so the ablation measures the graph",
+    "warm_feature_ranks": {
+      "community_shared_devices": 1,
+      "community_size": 13,
+      "community_young_share": 17,
+      "graph_clustering": 11,
+      "graph_degree": 23,
+      "ppr_risk": 30
+    },
+    "warm_importance_total": 0.50108
+  },
+  "experiment_id": "E3",
+  "feature_spec_version": "fs1",
+  "generated_at": "2026-09-20T16:31:12+00:00",
+  "git_commit": "bd0df07",
+  "metrics": {
+    "alert_rate": 0.013926359101116823,
+    "alerts": 924,
+    "f1": 0.9657458563535912,
+    "false_positive_rate": 0.0007637902326505048,
+    "hold": {
+      "alerts": 795,
+      "precision": 1.0,
+      "threshold": 0.9210951085659673
+    },
+    "pr_auc": 0.9972657987138157,
+    "precision": 0.9458874458874459,
+    "recall": 0.9864559819413092,
+    "recall_by_pattern": {
+      "ATO": 1.0,
+      "CARD_TESTING": 1.0,
+      "RING": 1.0,
+      "VELOCITY": 0.9259259259259259
+    },
+    "roc_auc": 0.9999523794893322,
+    "threshold": 0.08941748564781518,
+    "value_detection_rate": 0.9908935698198281
+  },
+  "name": "XGBoost, 36 features (hot + graph)",
+  "rows": 66349,
+  "split": "valid"
+}

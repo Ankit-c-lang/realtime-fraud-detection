@@ -80,37 +80,52 @@ def _guard(split: str) -> None:
 def load(
     split: str,
     *,
+    warm: bool = False,
     features_path: Path | None = None,
     labels_path: Path | None = None,
 ) -> pd.DataFrame:
-    """Features joined to labels for one split, with burn-in rows already gone."""
+    """Features joined to labels for one split, with burn-in rows already gone.
+
+    ``warm=True`` reads the 36-feature training table, where the graph snapshot has
+    already been attached by the point-in-time join (§6.4).
+    """
     _guard(split)
 
     known = windows()
     if split not in known:
         raise KeyError(f"unknown split {split!r}; configs/splits.yaml defines {sorted(known)}")
 
-    return _select(_joined(features_path, labels_path), split)
+    return _select(_joined(features_path, labels_path, warm=warm), split)
 
 
-def load_many(splits: list[str], **kwargs: Path | None) -> dict[str, pd.DataFrame]:
+def load_many(
+    splits: list[str], *, warm: bool = False, **kwargs: Path | None
+) -> dict[str, pd.DataFrame]:
     """Several splits from one read, since the parquet file is the expensive part."""
     for split in splits:
         _guard(split)
 
-    frame = _joined(kwargs.get("features_path"), kwargs.get("labels_path"))
+    frame = _joined(kwargs.get("features_path"), kwargs.get("labels_path"), warm=warm)
     return {split: _select(frame, split) for split in splits}
 
 
-def _joined(features_path: Path | None, labels_path: Path | None) -> pd.DataFrame:
+def _joined(
+    features_path: Path | None, labels_path: Path | None, *, warm: bool = False
+) -> pd.DataFrame:
     """Features, labels and the raw amount, joined once."""
     settings = Settings.from_env()
-    features = pd.read_parquet(features_path or settings.features_dir / "hot_features.parquet")
-    labels = pd.read_parquet(
-        labels_path or settings.raw_dir / "labels.parquet",
-        columns=["txn_id", *LABEL_COLUMNS],
-    )
-    frame = features.merge(labels, on="txn_id", validate="one_to_one")
+    default = "training_table.parquet" if warm else "hot_features.parquet"
+    features = pd.read_parquet(features_path or settings.features_dir / default)
+
+    if "is_fraud" in features.columns:
+        # The training table already carries its labels from the graph join (§6.4).
+        frame = features
+    else:
+        labels = pd.read_parquet(
+            labels_path or settings.raw_dir / "labels.parquet",
+            columns=["txn_id", *LABEL_COLUMNS],
+        )
+        frame = features.merge(labels, on="txn_id", validate="one_to_one")
 
     events = settings.raw_dir / "events.parquet"
     if events.is_file():
