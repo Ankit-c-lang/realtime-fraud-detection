@@ -5,26 +5,28 @@ that task. Source of truth for *what* to build is `PLAN.md`; this file only trac
 
 - **Plan version:** v1 (2026-09-16) · **Started:** 2026-09-20
 - **Current phase:** Phase 0 — Environment and skeleton (PLAN §17, Phase 0)
-- **Overall:** 6 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 6 / 7
+- **Overall:** 7 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 6.5 / 7
 
 ---
 
 ## Currently working on
 
-**Phase 0 · Task 6 — CI workflow (PLAN §14).**
-Add `.github/workflows/ci.yml` with the `lint-unit` job only: checkout, setup-uv pinned to Python
-3.12, `uv sync --frozen --all-groups`, `ruff check`, `ruff format --check`,
-`pytest -m "not redis and not slow"`. Confirm it goes green on GitHub.
+**Phase 0 · Task 2b — push to GitHub.**
+`ci.yml` is written and its steps pass locally, but the workflow has never run: the GitHub
+repository does not exist yet. The remote is already configured as
+`git@github.com:Ankit-c-lang/realtime-fraud-detection.git` (SSH authenticates as `Ankit-c-lang`).
 
-**Blocked:** needs the GitHub remote (task 2, below) before CI can run anywhere.
+**Blocked on the user:** `gh` is not installed on this VM, so the empty private repo
+`realtime-fraud-detection` must be created first (github.com/new, no README/licence/gitignore).
+Then `git push -u origin main` and confirm the `ci` workflow goes green.
 
 ---
 
 ## Next up (in order)
 
-1. **P0.2b** — create the GitHub repo and push `main` (needs the user: repo name and visibility).
-2. **P0.6** — `.github/workflows/ci.yml` (`lint-unit` job only); CI green on GitHub.
-3. Close Phase 0, tag `phase-0`, then start **Phase 1 (Simulator)** — `configs/` + `sim/population.py`.
+1. **P0.2b** — create the private GitHub repo, `git push -u origin main`, confirm CI is green (see *Currently working on*).
+2. Close Phase 0, tag `phase-0`.
+3. Start **Phase 1 (Simulator)** — prompt P1.1: `configs/{sim,sim_tiny,categories,splits}.yaml`, `configs/cities.csv`, then `src/fraud/sim/population.py` (PLAN §4.2-§4.3).
 
 ---
 
@@ -57,6 +59,7 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-20 | 0 | `uv lock` + `uv sync --all-groups` — 111 packages resolved, Python 3.12.3 | `uv.lock` committed |
 | 2026-09-20 | 0 | `git init` + first two commits (plan/context, then skeleton) | `git log`: 2369922, af2cc96 |
 | 2026-09-20 | 0 | `docker-compose.yml` with the `redis` service only, pinned to `redis:8.10.1-alpine`; container healthy | `docker compose exec redis redis-cli ping` → `PONG` |
+| 2026-09-20 | 0 | `.github/workflows/ci.yml` (`lint-unit` job) written; `origin` remote configured; GitHub SSH verified | CI steps pass locally; **not yet run on GitHub** |
 
 ---
 
@@ -72,7 +75,7 @@ before continuing — do not silently slip.
 - [x] 3. Skeleton from §16: empty modules w/ docstrings, `pyproject.toml` (§15.3), `.python-version`, Makefile stubs, `.gitignore`, `.dockerignore`, `.env.example`, `src/fraud/config.py`
 - [x] 4. `uv lock && uv sync --all-groups`
 - [x] 5. `docker-compose.yml` with the `redis` service only; `make redis-up` → `PONG`
-- [ ] 6. `.github/workflows/ci.yml` (`lint-unit`) + `tests/test_smoke.py`
+- [~] 6. `.github/workflows/ci.yml` (`lint-unit`) + `tests/test_smoke.py` — written and locally verified; **unproven until it runs on GitHub**
 - [ ] 7b. Commit + push; `make setup && make lint && make test` green; tag `phase-0`
 
 ### Phase 1 — Simulator (Day 1 pm → Day 3 midday, ~16 h, 5/10)
@@ -189,6 +192,8 @@ Record anything that departs from the plan, with the reason. Empty so far.
 | 2026-09-20 | Redis pinned to `redis:8.10.1-alpine`, not the plan's `redis:8-alpine` | §15.3 requires exact image tags; `8-alpine` resolved to server 8.10.1 (identical digest). CI must use this same tag | §12.2, §14, §15.3 |
 | 2026-09-20 | Added `tests/test_redis_smoke.py` + a `redis_client` fixture in Phase 0, earlier than §13 schedules | `make test-redis` otherwise exits 5 with no tests collected, so the target was untestable. The fixture also guards DB 15 | §13 |
 | 2026-09-20 | Makefile test targets now export `TEST_REDIS_URL` (DB 15) instead of inheriting `REDIS_URL` (DB 0) | The global `export REDIS_URL` leaked DB 0 into tests, which would have flushed live scorer state in Phase 6 | §13, §16.1 |
+| 2026-09-20 | CI pins `actions/checkout@v7` and `astral-sh/setup-uv@v10`, not the plan's v5/v6 | §14 says to use the current major version; v7 and v10 are current as of today | §14 |
+| 2026-09-20 | CI runs `make lint` / `make test` instead of the raw `uv run ruff`/`pytest` lines | Keeps the CI gates identical to the local ones so they cannot drift. The `uv sync --frozen` step is kept exactly as the plan has it | §14 |
 
 ---
 

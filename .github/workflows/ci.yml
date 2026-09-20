@@ -1,0 +1,31 @@
+# Phase 0 ships the lint-unit job only. The redis-integration and image-build jobs
+# from PLAN §14 arrive in Phase 9, once there is Redis code and a Dockerfile.
+#
+# CI never needs data/ or models/: it does not train, and it does not run a replay.
+# Those depend on the hardware and are run locally with `make all` and `make bench`.
+name: ci
+
+on: [push, pull_request]
+
+jobs:
+  lint-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10
+        with:
+          # One of the four places Python 3.12 is pinned (PLAN §15.3).
+          python-version: "3.12"
+
+      # --frozen fails the build if uv.lock is out of date with pyproject.toml,
+      # so CI can never silently resolve a different dependency set than the VM.
+      - name: Install dependencies
+        run: uv sync --frozen --all-groups
+
+      # The same targets used locally, so the gates cannot drift from `make lint`/`make test`.
+      - name: Lint and format check
+        run: make lint
+
+      - name: Unit tests
+        run: make test
