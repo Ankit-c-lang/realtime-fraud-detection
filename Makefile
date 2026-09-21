@@ -77,22 +77,30 @@ all: data features graph train  ## The whole offline pipeline
 # --- live stack -------------------------------------------------------------
 
 up:  ## Build and start the stack (PLAN §12.2)
-	@echo "not implemented yet: $@ — Phase 9, PLAN §12.2"; exit 1
+	# Build ONE service, not `up --build`. Every service shares `image: fraud-app:local`,
+	# but `--build` still starts a build job per service, and six concurrent jobs each
+	# needing scratch space fill a 39 GB disk before the layer cache can help.
+	docker compose build scorer
+	docker compose up -d
 
 demo:  ## Replay the test window through the stack (PLAN §12.2)
-	@echo "not implemented yet: $@ — Phase 9, PLAN §12.2"; exit 1
+	docker compose --profile demo up replayer
 
 logs:  ## Follow the scorer and graph-refresh logs
-	@echo "not implemented yet: $@ — Phase 9, PLAN §12.2"; exit 1
+	docker compose logs -f scorer graph-refresh
 
 demo-reset:  ## Tear the stack down and drop replay output
-	@echo "not implemented yet: $@ — Phase 9, PLAN §12.2"; exit 1
+	docker compose --profile demo down -v
+	rm -rf data/scored data/graph/live
 
 smoke:  ## End-to-end check: replay 2,000 events and assert the output
-	@echo "not implemented yet: $@ — Phase 9, PLAN §12.2"; exit 1
+	docker compose build scorer
+	docker compose up -d redis backfill scorer graph-refresh api
+	docker compose run --rm --no-deps replayer python -m fraud.stream.replayer --max --limit 2000
+	$(RUN) python scripts/smoke_check.py --expect 2000
 
 bench:  ## Throughput and latency benchmark (PLAN §9.6)
-	@echo "not implemented yet: $@ — Phase 9, PLAN §9.6"; exit 1
+	$(RUN) python scripts/benchmark_stream.py
 
 rescore-check:  ## Re-score live output offline and compare (PLAN §9.6)
 	$(RUN) python scripts/rescore_check.py

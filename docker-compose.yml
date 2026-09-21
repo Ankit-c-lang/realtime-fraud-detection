@@ -1,14 +1,42 @@
-# Phase 0 holds only Redis. The application services (backfill, scorer, graph-refresh,
-# api, dashboard, replayer) and the shared x-app anchor arrive in Phase 9, PLAN §12.2.
-# There is no top-level `version:` key; Compose v2 no longer uses it.
+# The full stack (PLAN §12.2). No top-level `version:` key; Compose v2 dropped it.
+#
+# Startup order is enforced by conditions, not by luck:
+#   redis (healthy) -> backfill (runs to completion) -> scorer / graph-refresh / api
+#   -> dashboard.  The replayer only runs when asked, via the `demo` profile.
+
+x-app: &app
+  build: .
+  image: fraud-app:local
+  # Shared, host-neutral settings. Anything that differs between the host and a
+  # container is overridden below rather than written here.
+  env_file:
+    # Optional so a fresh clone comes up before anyone copies .env.example.
+    - path: .env
+      required: false
+  environment:
+    # These four MUST differ from their host values, and §12.2's own "common mistakes"
+    # list names `.env` pointing at localhost as the classic failure. Compose
+    # `environment:` beats `env_file:`, so .env stays correct for host-side commands
+    # (make backfill, make test-redis, the replayer) and containers still get the
+    # service-network values.
+    REDIS_URL: redis://redis:6379/0
+    DATA_DIR: /app/data
+    MODEL_DIR: /app/models
+    API_URL: http://api:8000
+  volumes:
+    # data/ is read-write: the scorer writes scored/ and graph-refresh writes graph/live/.
+    - ./data:/app/data
+    # models/ is read-only. Nothing in the serving path may rewrite an artifact, and
+    # the mount makes that structural rather than a convention (PLAN §8).
+    - ./models:/app/models:ro
 
 services:
   redis:
-    # Pinned to the exact tag pulled on this VM (PLAN §15.3 pinning policy).
-    # redis:8-alpine resolved to server v8.10.1, digest bd999b5c...
-    # CI must use this same tag (PLAN §14).
+    # Exact tag pulled on this VM (PLAN §15.3). Any Redis >= 7.0 works — `lag` in
+    # XINFO GROUPS needs 7.0 — and Valkey is a drop-in alternative.
     image: redis:8.10.1-alpine
-    # Append-only persistence so state survives a container restart during a demo.
+    # Append-only persistence so state survives a restart mid-demo. everysec is the
+    # documented trade: up to ~1s of writes can be lost (PLAN §9.3).
     command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
     volumes:
       - redis-data:/data
@@ -21,6 +49,70 @@ services:
       timeout: 3s
       retries: 10
     restart: unless-stopped
+
+  # Runs once and exits. Everything else waits for it to succeed, because a scorer
+  # started against cold state would score day 73 as if every account were new (§9.5).
+  backfill:
+    <<: *app
+    command: ["python", "-m", "fraud.stream.backfill"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: "no"
+
+  scorer:
+    <<: *app
+    command: ["python", "-m", "fraud.stream.scorer"]
+    depends_on:
+      backfill:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    # docker stop sends SIGTERM; the scorer flushes and acks on the way out (§9.2).
+    # 20s is room for the final Parquet write, not an arbitrary grace.
+    stop_grace_period: 20s
+
+  graph-refresh:
+    <<: *app
+    command: ["python", "-m", "fraud.graph.refresh_live"]
+    depends_on:
+      backfill:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  api:
+    <<: *app
+    command: ["uvicorn", "fraud.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    depends_on:
+      backfill:
+        condition: service_completed_successfully
+    healthcheck:
+      # No curl in the slim image; urllib is already there.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  dashboard:
+    <<: *app
+    command:
+      ["streamlit", "run", "dashboard/app.py", "--server.address=0.0.0.0", "--server.port=8501"]
+    ports:
+      - "8501:8501"
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # Only with `--profile demo`, so `make up` brings up the stack without immediately
+  # firing 102,987 events at it.
+  replayer:
+    <<: *app
+    command: ["python", "-m", "fraud.stream.replayer", "--speedup", "3600"]
+    profiles: ["demo"]
+    depends_on:
+      scorer:
+        condition: service_started
 
 volumes:
   redis-data: {}
