@@ -23,6 +23,7 @@ import numpy as np
 
 from fraud.config import PROJECT_ROOT, Settings
 from fraud.modeling.experiments import EXPERIMENTS_DIR
+from fraud.modeling.metrics import review_budget
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,77 @@ def _load(experiment_id: str) -> dict[str, Any] | None:
     if not path.is_file():
         return None
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _positives(metrics: dict[str, Any]) -> int:
+    """Fraud rows in a split, implied by the recorded metrics.
+
+    The Evaluation does not store a positive count, but ``alerts * precision`` is the
+    true positives and dividing by recall recovers the total. Cross-checking against
+    ``false_positive_rate`` gives the same number, so this is arithmetic on recorded
+    values rather than a second read of the data.
+    """
+    if not metrics["recall"]:
+        return 0
+    return round(metrics["alerts"] * metrics["precision"] / metrics["recall"])
+
+
+def _budget_note(suffix: str) -> str:
+    """Say plainly when the alert rate broke the budget, and why (PLAN §7.7, §7.8).
+
+    The budget is a promise about analyst capacity, so an overshoot is reported rather
+    than smoothed over. It is also not a model failure here: the threshold is frozen on
+    validation by design, and the alert rate follows whatever fraud prevalence the split
+    happens to have.
+    """
+    test, valid = _load("E4" + suffix), _load("E4")
+    if test is None or valid is None:
+        return ""
+
+    budget = review_budget()
+    rate = test["metrics"]["alert_rate"]
+    if rate <= budget:
+        return f"The alert rate is {rate:.2%}, inside the {budget:.0%} review budget (§7.7).\n"
+
+    test_rate = _positives(test["metrics"]) / test["rows"]
+    valid_rate = _positives(valid["metrics"]) / valid["rows"]
+    return (
+        f"> **The alert rate is {rate:.2%}, above the {budget:.0%} review budget.** The "
+        f"budget was met on validation ({valid['metrics']['alert_rate']:.2%}) and the "
+        "threshold was carried over unchanged, as §7.11 requires — it was deliberately "
+        "not re-tuned on test.\n>\n"
+        f"> The cause is prevalence, not drift. The test window carries {test_rate:.2%} "
+        f"fraud against validation's {valid_rate:.2%}, {test_rate / valid_rate:.2f}x as "
+        f"much ({_positives(test['metrics']):,} fraudulent rows in {test['rows']:,}). At "
+        f"{test['metrics']['recall']:.1%} recall the alert count tracks the fraud count "
+        "almost exactly, so more fraud means more alerts at the same threshold. E2 and "
+        "E3 overshoot by the same margin, which is what rules this out as something "
+        "specific to the blend.\n>\n"
+        "> In production this is what the budget is for: it would show up as a capacity "
+        "breach and the threshold would be raised for the next model version, trading "
+        "recall for load. It is reported here rather than fixed, because re-tuning on "
+        "test is exactly what §7.11 forbids.\n"
+    )
+
+
+def _test_provenance() -> str:
+    """The audit line proving the split was read once, and when (PLAN §7.11)."""
+    log = PROJECT_ROOT / "reports" / "test_runs.log"
+    if not log.is_file():
+        return ""
+    runs = [
+        line
+        for line in log.read_text(encoding="utf-8").splitlines()
+        if line and not line.startswith("#")
+    ]
+    if not runs:
+        return ""
+    fields = runs[0].split("\t")
+    plural = "" if len(runs) == 1 else f" ({len(runs)} runs recorded; the first is reported)"
+    return (
+        f"Evaluated once on {fields[0]}, model `{fields[1]}`, commit `{fields[2]}`"
+        f"{plural}. Every run appends to `reports/test_runs.log` (§7.11).\n"
+    )
 
 
 def _table(suffix: str = "") -> str:
@@ -86,6 +158,23 @@ def _hold_table(suffix: str = "") -> str:
     payload = _load("E4" + suffix)
     if payload is None:
         return "_Not available._\n"
+
+    if suffix:
+        # On the test section, the question a reader will actually have is whether the
+        # tier was switched off after seeing test results. It was not, and the ordering
+        # is checkable rather than asserted.
+        return (
+            "**Unchanged from validation: HOLD is disabled.** The tier was switched off "
+            "when the thresholds were chosen on the validation split, before the test "
+            "split had been read, and the artifact was not rebuilt afterwards. The test "
+            "evaluation applied the stored policy and reports "
+            f'`enabled: false, source: "policy"`, with {payload["metrics"]["hold"]["alerts"]} '
+            "HOLD decisions.\n\n"
+            "The ordering is verifiable: the commit in `reports/test_runs.log` is the one "
+            "that already carried the disabled tier, and `models/v1/metadata.json` has "
+            "one `metrics.test` block written by that run and a `thresholds` block "
+            "written before it (§7.11, §8).\n"
+        )
 
     hold = payload["metrics"]["hold"]
     enabled = payload["details"].get("hold_enabled", hold["threshold"] is not None)
@@ -251,7 +340,13 @@ def render(figure: Path | None = None) -> str:
             "Read once (§7.11). Thresholds come from the validation split; nothing here",
             "was fitted or tuned on test.",
             "",
+            _test_provenance(),
+            "",
             _table("_test"),
+            "",
+            "### Alert budget on test",
+            "",
+            _budget_note("_test"),
             "",
             "### HOLD tier",
             "",

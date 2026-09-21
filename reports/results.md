@@ -31,9 +31,35 @@ The measured numbers are kept in `models/*/metadata.json` under `thresholds.vali
 
 ## Test split
 
-_Not evaluated yet._ The test split is read exactly once, by
-`make evaluate-test V=v1`, and every run appends a line to
-`reports/test_runs.log` (§7.11).
+Read once (§7.11). Thresholds come from the validation split; nothing here
+was fitted or tuned on test.
+
+Evaluated once on 2026-09-21T01:59:13+00:00, model `v1`, commit `0d30e50`. Every run appends to `reports/test_runs.log` (§7.11).
+
+
+| Exp | PR-AUC | Precision | Recall | F1 | FPR | Alert rate | VDR | VEL | ATO | CT | RING |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| E1 · rules R1-R4 | 0.4799 | 0.702 | 0.663 | 0.682 | 0.0058 | 1.90% | 0.408 | 0.81 | 0.16 | 0.77 | 0.64 |
+| E2 · XGBoost, 30 hot | 0.9982 | 0.960 | 0.993 | 0.976 | 0.0008 | 2.08% | 0.995 | 0.96 | 1.00 | 1.00 | 1.00 |
+| E3 · XGBoost, 36 | 0.9983 | 0.953 | 0.994 | 0.973 | 0.0010 | 2.10% | 0.996 | 0.96 | 1.00 | 1.00 | 1.00 |
+| E4 · blend at w* | 0.9938 | 0.958 | 0.993 | 0.975 | 0.0009 | 2.09% | 0.996 | 0.97 | 1.00 | 1.00 | 0.99 |
+
+
+### Alert budget on test
+
+> **The alert rate is 2.09%, above the 2% review budget.** The budget was met on validation (1.37%) and the threshold was carried over unchanged, as §7.11 requires — it was deliberately not re-tuned on test.
+>
+> The cause is prevalence, not drift. The test window carries 2.01% fraud against validation's 1.34%, 1.51x as much (2,075 fraudulent rows in 102,987). At 99.3% recall the alert count tracks the fraud count almost exactly, so more fraud means more alerts at the same threshold. E2 and E3 overshoot by the same margin, which is what rules this out as something specific to the blend.
+>
+> In production this is what the budget is for: it would show up as a capacity breach and the threshold would be raised for the next model version, trading recall for load. It is reported here rather than fixed, because re-tuning on test is exactly what §7.11 forbids.
+
+
+### HOLD tier
+
+**Unchanged from validation: HOLD is disabled.** The tier was switched off when the thresholds were chosen on the validation split, before the test split had been read, and the artifact was not rebuilt afterwards. The test evaluation applied the stored policy and reports `enabled: false, source: "policy"`, with 0 HOLD decisions.
+
+The ordering is verifiable: the commit in `reports/test_runs.log` is the one that already carried the disabled tier, and `models/v1/metadata.json` has one `metrics.test` block written by that run and a `thresholds` block written before it (§7.11, §8).
+
 
 ## E5 · leave-one-pattern-out: does the ensemble earn its place?
 
@@ -59,3 +85,10 @@ Mean overall recall across the four withheld-pattern runs, by blend weight:
 at 0.5, so a better point below it would not be visible, and the top of the
 curve is flat — the margin over `w = 0.7` is about two transactions. What the
 curve does support is the step away from `w = 1.0`.
+
+## Global feature importance
+
+![Global contributions](figures/global_contributions.png)
+
+Contributions come from the model's own `pred_contribs`, the same numbers
+behind the per-alert reason codes (§7.10).

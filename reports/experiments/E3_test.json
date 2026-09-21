@@ -1,0 +1,46 @@
+{
+  "details": {
+    "params": {
+      "colsample_bytree": 0.6,
+      "learning_rate": 0.1,
+      "max_depth": 4,
+      "min_child_weight": 5,
+      "reg_lambda": 5,
+      "subsample": 0.7
+    },
+    "refit": "deterministic refit of the recorded configuration; nothing is fitted on test",
+    "threshold_source": "chosen on valid, applied to test (PLAN \u00a77.11)"
+  },
+  "experiment_id": "E3_test",
+  "feature_spec_version": "fs1",
+  "generated_at": "2026-09-21T01:59:13+00:00",
+  "git_commit": "0d30e50",
+  "metrics": {
+    "alert_rate": 0.021012360783399846,
+    "alerts": 2164,
+    "f1": 0.9733427695211134,
+    "false_positive_rate": 0.0010008720469319803,
+    "hold": {
+      "alerts": 2105,
+      "enabled": true,
+      "precision": 0.9762470308788599,
+      "source": "search",
+      "threshold": 0.2099523056451229
+    },
+    "pr_auc": 0.9982588695784952,
+    "precision": 0.9533271719038817,
+    "recall": 0.9942168674698795,
+    "recall_by_pattern": {
+      "ATO": 1.0,
+      "CARD_TESTING": 1.0,
+      "RING": 0.9982773471145564,
+      "VELOCITY": 0.96415770609319
+    },
+    "roc_auc": 0.9999378105413568,
+    "threshold": 0.08941748564781518,
+    "value_detection_rate": 0.9961893988890734
+  },
+  "name": "XGBoost, 36 features (hot + graph)",
+  "rows": 102987,
+  "split": "test"
+}

@@ -202,7 +202,7 @@ def _export_results() -> Any:
     return module
 
 
-def _experiment(experiment_id: str, **metrics: Any) -> dict[str, Any]:
+def _experiment(experiment_id: str, *, rows: int = 66349, **metrics: Any) -> dict[str, Any]:
     base = {
         "pr_auc": 0.99,
         "precision": 0.9,
@@ -225,6 +225,7 @@ def _experiment(experiment_id: str, **metrics: Any) -> dict[str, Any]:
     return {
         "experiment_id": experiment_id,
         "git_commit": "abc1234",
+        "rows": rows,
         "metrics": base,
         "details": {"model_version": "v1", "hold_enabled": False},
     }
@@ -288,3 +289,115 @@ def test_results_carries_the_synthetic_data_caveat(rendered: str) -> None:
 
 def test_results_says_it_is_generated(rendered: str) -> None:
     assert "Do not edit by hand" in rendered
+
+
+# --- the test section, once the split has been read --------------------------------
+
+
+@pytest.fixture
+def rendered_with_test(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
+    """A render where the test split has been evaluated and broke the alert budget."""
+    export = _export_results()
+    monkeypatch.setattr(export, "EXPERIMENTS_DIR", tmp_path)
+    monkeypatch.setattr(export, "PROJECT_ROOT", tmp_path)
+
+    # Validation: inside the budget. Test: over it, purely because prevalence doubled.
+    (tmp_path / "E4.json").write_text(
+        json.dumps(_experiment("E4", alert_rate=0.0137, alerts=909, precision=0.96, recall=0.985))
+    )
+    (tmp_path / "E4_test.json").write_text(
+        json.dumps(
+            _experiment(
+                "E4_test",
+                rows=102987,
+                alert_rate=0.0209,
+                alerts=2151,
+                precision=0.958,
+                recall=0.993,
+            )
+        )
+    )
+    log = tmp_path / "reports" / "test_runs.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text(
+        "# timestamp\tmodel_version\tgit_commit\trows\tpr_auc\n"
+        "2026-09-21T01:59:13+00:00\tv1\t0d30e50\trows=102987\tpr_auc=0.993788\n"
+    )
+    return export.render(None)
+
+
+def test_budget_overshoot_is_stated_not_buried(rendered_with_test: str) -> None:
+    """A capacity promise that was broken has to be said out loud (§7.7, §7.8)."""
+    assert "2.09%, above the 2% review budget" in rendered_with_test
+    assert "deliberately not re-tuned on test" in rendered_with_test
+
+
+def test_budget_overshoot_names_prevalence_as_the_cause(rendered_with_test: str) -> None:
+    """The overshoot is explained, so nobody reads it as the model degrading."""
+    assert "The cause is prevalence, not drift" in rendered_with_test
+    assert "2.01% fraud against validation's" in rendered_with_test
+
+
+def test_budget_note_is_silent_when_inside_the_budget(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    export = _export_results()
+    monkeypatch.setattr(export, "EXPERIMENTS_DIR", tmp_path)
+    (tmp_path / "E4.json").write_text(json.dumps(_experiment("E4", alert_rate=0.0137)))
+    (tmp_path / "E4_test.json").write_text(
+        json.dumps(_experiment("E4_test", rows=102987, alert_rate=0.018))
+    )
+
+    note = export._budget_note("_test")
+    assert "above the" not in note
+    assert "inside the 2% review budget" in note
+
+
+def test_test_section_says_hold_was_unchanged(rendered_with_test: str) -> None:
+    """The question a reader will have: was the tier switched off after seeing test?"""
+    assert "Unchanged from validation: HOLD is disabled" in rendered_with_test
+    assert "before the test split had been read" in rendered_with_test
+    assert "not rebuilt afterwards" in rendered_with_test
+
+
+def test_test_section_carries_the_audit_line(rendered_with_test: str) -> None:
+    assert "Evaluated once on 2026-09-21T01:59:13+00:00" in rendered_with_test
+    assert "commit `0d30e50`" in rendered_with_test
+    assert "_Not evaluated yet._" not in rendered_with_test
+
+
+def test_repeated_runs_would_be_flagged_in_the_report(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A second look at test must be visible in the report, not only in the log."""
+    export = _export_results()
+    monkeypatch.setattr(export, "PROJECT_ROOT", tmp_path)
+    log = tmp_path / "reports" / "test_runs.log"
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text(
+        "# h\n"
+        "2026-09-21T01:59:13+00:00\tv1\tabc\trows=1\tpr_auc=0.9\n"
+        "2026-09-21T02:59:13+00:00\tv1\tdef\trows=1\tpr_auc=0.8\n"
+    )
+    note = export._test_provenance()
+    assert "2 runs recorded; the first is reported" in note
+
+
+def test_implied_positive_count_matches_both_derivations() -> None:
+    """alerts*precision/recall and the FPR route must agree, or the note is wrong."""
+    export = _export_results()
+    metrics = {
+        "alerts": 2151,
+        "precision": 0.9576940957694096,
+        "recall": 0.9927710843373494,
+        "false_positive_rate": 0.0009017758046614872,
+    }
+    rows = 102987
+    via_recall = export._positives(metrics)
+
+    false_alerts = metrics["alerts"] * (1 - metrics["precision"])
+    negatives = false_alerts / metrics["false_positive_rate"]
+    via_fpr = round(rows - negatives)
+
+    assert via_recall == 2075
+    assert abs(via_recall - via_fpr) <= 1

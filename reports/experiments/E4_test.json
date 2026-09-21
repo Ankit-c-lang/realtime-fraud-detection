@@ -1,0 +1,50 @@
+{
+  "details": {
+    "blend_weight": 0.5,
+    "hold_degenerate": true,
+    "hold_enabled": false,
+    "model_version": "v1",
+    "note": "Scored through RiskModel, the same path the scorer and the API use. The threshold comes from the artifact and is never re-chosen on the split being measured (PLAN \u00a77.11).",
+    "params": {
+      "colsample_bytree": 0.6,
+      "learning_rate": 0.1,
+      "max_depth": 4,
+      "min_child_weight": 5,
+      "reg_lambda": 5,
+      "subsample": 0.7
+    },
+    "threshold_source": "models/v1/metadata.json, chosen on valid"
+  },
+  "experiment_id": "E4_test",
+  "feature_spec_version": "fs1",
+  "generated_at": "2026-09-21T01:59:13+00:00",
+  "git_commit": "0d30e50",
+  "metrics": {
+    "alert_rate": 0.02088613125928515,
+    "alerts": 2151,
+    "f1": 0.9749171793658306,
+    "false_positive_rate": 0.0009017758046614872,
+    "hold": {
+      "alerts": 0,
+      "enabled": false,
+      "precision": null,
+      "source": "policy",
+      "threshold": null
+    },
+    "pr_auc": 0.9937876002295649,
+    "precision": 0.9576940957694096,
+    "recall": 0.9927710843373494,
+    "recall_by_pattern": {
+      "ATO": 1.0,
+      "CARD_TESTING": 1.0,
+      "RING": 0.9948320413436692,
+      "VELOCITY": 0.967741935483871
+    },
+    "roc_auc": 0.9990817575040928,
+    "threshold": 0.5128232795323753,
+    "value_detection_rate": 0.9958524180416654
+  },
+  "name": "XGBoost + Isolation Forest at w*, the final model",
+  "rows": 102987,
+  "split": "test"
+}

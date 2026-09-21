@@ -4,41 +4,45 @@ Living status file. **Update it at the end of every completed task**, together w
 that task. Source of truth for *what* to build is `PLAN.md`; this file only tracks *where we are*.
 
 - **Plan version:** v1 (2026-09-16) · **Started:** 2026-09-20
-- **Current phase:** Phase 5 — Isolation Forest, blend, explanations, artifacts (PLAN §17, Phase 5) · Phases 0-4 complete · tags `phase-0`, `sim-v1`, `phase-2`, `sim-v2`, **`sim-v2-fix1`**
+- **Current phase:** Phase 6 — Streaming pipeline (PLAN §17, Phase 6) · Phases 0-5 complete · tags `phase-0`, `sim-v1`, `phase-2`, `sim-v2`, **`sim-v2-fix1`**
 - **Phase 1 progress:** 8 / 8 ✅ — **simulator FROZEN, tagged `sim-v1`**
 - **Phase 2 progress:** 7 / 7 ✅ — tagged `phase-2`
 - **Phase 3 progress:** 6 / 6 ✅ (E3 ablation belongs to Phase 4)
 - **Phase 4 progress:** 6 / 6 ✅
-- **Phase 5 progress:** 8 / 8 — code complete; **awaiting the user's single `make evaluate-test V=v1`**
-- **Overall:** 42 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Phase 5 progress:** 8 / 8 ✅ — **COMPLETE**, test split evaluated once on 2026-09-21
+- **Overall:** 43 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Nothing — Phase 5 code is complete and waiting on one action from the user.**
+**Nothing — Phase 5 is closed. Phase 6 has not been started.**
 
-`make evaluate-test V=v1` reads the test split, **once**. It is deliberately not run
-here (prompt P5.3). It will fill `metrics.test` in `models/v1/metadata.json`, write
-`reports/experiments/E{1,2,3,4}_test.json`, append the first line of
-`reports/test_runs.log`, and re-render `reports/results.md`.
+The 🚩 Day-8 checkpoint is met: `models/v1/` exists, `reports/results.md` exists, and
+`reports/test_runs.log` holds **exactly one line**.
 
-Proof it has not been read: `reports/test_runs.log` does not exist and
-`models/v1/metadata.json` has `metrics.test = null`.
+Headline, from the single test evaluation (2026-09-21T01:59:13Z, commit `0d30e50`):
+**PR-AUC 0.9938 on test against 0.9938 on validation** — the model did not overfit the
+split it was tuned on.
 
-✅ **Settled 2026-09-21: HOLD stays disabled for `v1`; every flagged transaction goes to
-REVIEW.** Accepted by the user. Verified consistent across the artifact, its metadata,
-the experiment files, the generated report and the serving path — see the deviations
-table.
+Two things are reported rather than fixed, both in `reports/results.md`:
+
+- **Test alert rate 2.09% exceeds the 2% review budget.** The threshold was frozen on
+  validation and deliberately not re-tuned (§7.11). The cause is prevalence: the test
+  window carries 2.01% fraud against validation's 1.34%, 1.51x as much, and at 99.3%
+  recall alerts track the fraud count. E2 (2.08%) and E3 (2.10%) overshoot identically,
+  so it is not specific to the blend.
+- **HOLD stayed disabled.** It was switched off when thresholds were chosen on
+  validation, before test was read, and the artifact was not rebuilt afterwards.
 
 ---
 
 ## Next up (in order)
 
-1. **`make evaluate-test V=v1`** — **the user runs this, once.** Then `make results` re-renders the test tables (the target chains it automatically).
-2. **Phase 6 · P6.1** — `features/store_redis.py` first, with `test_parity_redis.py` and `test_idempotency.py`.
-3. **Phase 6 · P6.2** — `stream/replayer.py`: pacing, label stripping, backpressure.
-4. **Phase 6 · P6.3** — `stream/scorer.py`: consumer group, idempotent per-event commit, XACK only after the sink flush.
+1. **P6.1** — `features/store_redis.py` **first**: one pipeline for load, one `MULTI/EXEC` for commit, `ZADD`/`ZCOUNT` with an exclusive upper bound, periodic trimming, `decode_responses=True`. Plus `test_parity_redis.py` and `test_idempotency.py`.
+2. **P6.2** — `stream/replayer.py`: pacing, label stripping, backpressure.
+3. **P6.3** — `stream/scorer.py`: consumer group, idempotent per-event commit, `XACK` only after the sink flush.
+4. **P6.4** — `stream/recovery.py`, `backfill.py`, and the §9.6 re-score check.
 
 ---
 
@@ -119,6 +123,9 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-20 | 5 | **E4** (blend at `w*`, scored through `RiskModel`) and **E5** (LOPO evidence) on valid | `reports/experiments/E4.json`, `E5.json` |
 | 2026-09-20 | 5 | `modeling/evaluate_test.py` — `ALLOW_TEST=1` guard, threshold taken from the artifact, `metrics.test` written once, append-only `reports/test_runs.log` | `tests/test_evaluate_test.py` 17 passed; **not run against test** |
 | 2026-09-20 | 5 | `scripts/export_results.py` + `make results` — generates `reports/results.md` (§7.9 tables) and the shap beeswarm | `reports/results.md`, `reports/figures/global_contributions.png` |
+| 2026-09-21 | 5 | **Test split evaluated once** (user-run). Test PR-AUC **0.9938** vs valid 0.9938; recall 0.993, precision 0.958, VDR 0.996; RING 0.99, ATO/CT 1.00, VEL 0.97 | `reports/test_runs.log` (1 line), `models/v1/metadata.json` `metrics.test`, `reports/experiments/E{1,2,3,4}_test.json` |
+| 2026-09-21 | 5 | Report generator now states the **2.09% test alert rate vs the 2% budget** with its cause, the test-run provenance line, and that **HOLD was disabled before test and unchanged** | `reports/results.md`; `tests/test_evaluate_test.py` 24 passed |
+| 2026-09-21 | 5 | **Phase 5 closed.** 🚩 Day-8 checkpoint met | 440 tests green |
 
 ---
 
@@ -177,16 +184,16 @@ before continuing — do not silently slip.
 - [x] 7. `test_graph_*`, `test_asof_join.py`
 - **Gate:** 89 snapshots < ~10 min (else weekly + document); E3 ring recall clearly above E2
 
-### Phase 5 — Isolation Forest, blend, explanations, artifacts (Day 8, ~8 h, 5/10) — CODE COMPLETE (8 / 8), awaiting the single test evaluation
+### Phase 5 — Isolation Forest, blend, explanations, artifacts (Day 8, ~8 h, 5/10) — ✅ COMPLETE (2026-09-21)
 - [x] 1. `modeling/iforest.py` — fit on train only, label-free ✅ 2026-09-20
 - [x] 2. `modeling/blend.py` — four `XGB_-k` models, grid over `w`, pick `w*` (§7.6); `w* = 0.5`, fallback not needed ✅ 2026-09-20
 - [x] 3. `modeling/decisions.py` — REVIEW / HOLD thresholds on valid; **HOLD disabled, it does not separate** ✅ 2026-09-20
 - [x] 4. `scoring/reasons.py` + `configs/reason_codes.yaml` — top-3 reasons + anomaly reason, all 36 features ✅ 2026-09-20
 - [x] 5. `modeling/artifacts.py` — save/load `models/v1`, write `models/CURRENT`, `make train V=v1` ✅ 2026-09-20
 - [x] 6. `scoring/risk_model.py` — `RiskModel.load()` / `score_batch()` + startup compat checks ✅ 2026-09-20
-- [x] 7. **E4**, **E5 (LOPO)** on valid ✅ 2026-09-20 · `evaluate_test.py` + `export_results.py` written; **`make evaluate-test V=v1` is the user's to run**
+- [x] 7. **E4**, **E5 (LOPO)** on valid ✅ 2026-09-20 · **`make evaluate-test V=v1` run by the user once on 2026-09-21** → `reports/results.md`, one line in `reports/test_runs.log` ✅
 - [x] 8. `test_scoring.py` (31) + `test_reason_codes.py` (16) ✅ 2026-09-20 · `test_training_smoke.py` part 2 still open
-- **🚩 CHECKPOINT (end of Day 8): `models/v1` + `reports/results.md` exist.** Exactly one line in `reports/test_runs.log`.
+- **🚩 CHECKPOINT (end of Day 8): MET ✅ 2026-09-21** — `models/v1/` and `reports/results.md` exist; `reports/test_runs.log` has exactly one line.
 
 ### Phase 6 — Streaming pipeline (Days 9-10, ~16 h, 7/10)
 - [ ] 1. `features/store_redis.py` **first**, + `test_parity_redis.py` + `test_idempotency.py`
@@ -322,6 +329,9 @@ again in either file.
 | 2026-09-20 | The global contribution figure is a real `shap` beeswarm, not the matplotlib fallback | §7.10 allows either. `shap` 0.52 and XGBoost 3.4 agreed, and the beeswarm shows direction and spread rather than magnitude alone — low `account_age_days` and high `dev_accts_30d` visibly push towards fraud. The fallback path is kept and still reachable | §7.10 |
 | 2026-09-21 | **ACCEPTED by the user: `v1` ships with HOLD disabled — all 909 flagged transactions go to REVIEW at 0.960 precision** | Confirmed on 2026-09-21 after the §7.7 tier collapse was reported. `ALLOW`/`REVIEW`/`HOLD` stays the decision vocabulary, so a later version can enable the tier with no schema change, and the scorer's `hold:acct:{id}` path (§7.7, Phase 6) is simply dormant in `v1`. Verified end to end: `thresholds.hold = null`, `hold_enabled = false`, `hold_degenerate = true`; `metrics.valid.hold` reports `enabled: false, source: "policy"`; `E4.json` matches byte for byte; `results.md` states the policy; scoring the valid split through `RiskModel` yields 65,440 ALLOW + 909 REVIEW and **zero HOLD** | §7.7 |
 | 2026-09-21 | The reported HOLD block now follows the policy instead of re-searching, and `metrics.hold` gained `enabled` and `source` | Verifying the accepted decision found a real inconsistency: `evaluate_at` ran its own `hold_threshold()` search regardless of the policy, so `models/v1/metadata.json` and `E4.json` advertised a live tier at threshold `0.5128` beside `thresholds.hold = null` — telling a reader the system freezes cards when it does not. `evaluate_at(..., hold=...)` now takes the policy; left unset it still searches, which is the right question for a candidate model nobody ships (`E2`/`E3`/`E3b` keep `source: "search"`). `models/v1` was rebuilt to regenerate the metadata only: PR-AUC `0.9937680386465483`, threshold `0.5128232795323753` and 909 alerts are all bit-identical, and round-trip verification measures 0. **No modelling choice changed** | §7.7, §8 |
+| 2026-09-21 | **Test alert rate 2.09% breaches the 2% review budget — reported, not fixed** | The threshold is frozen on validation (1.37% there) and §7.11 forbids re-tuning it on test, so the breach is published rather than corrected. It is prevalence, not drift: test carries 2.01% fraud against validation's 1.34% (2,075 of 102,987 rows), 1.51x as much, and at 99.3% recall the alert count tracks the fraud count almost exactly. E2 (2.08%) and E3 (2.10%) overshoot by the same margin, ruling out anything specific to the blend. In production this is precisely what a budget is for: it surfaces as a capacity breach and the threshold rises in the next model version, trading recall for load | §7.7, §7.8, §7.11 |
+| 2026-09-21 | **HOLD was disabled before the test split was read, and nothing was rebuilt afterwards** | Verifiable rather than asserted: `models/v1/metadata.json` has `created_at` 01:48:13Z with the `thresholds` block already disabled, the single `reports/test_runs.log` line is 01:59:13Z, and every model binary (`xgb.ubj`, `iforest.joblib`, `anomaly_quantiles.npy`, `feature_stats.json`) still carries its 01:48 timestamp — only `metadata.json` was touched, by the run filling `metrics.test`. The test evaluation applied the stored policy and recorded `enabled: false, source: "policy"`, 0 HOLD decisions | §7.11, §8 |
+| 2026-09-21 | `metadata.git_commit` records HEAD at build time and does not flag a dirty tree | `models/v1` was built at 01:48 from a working tree that was committed minutes later as `0d30e50`, so the metadata says `5ba2675` while `test_runs.log` says `0d30e50`. Harmless here — the diff between them changed only how the HOLD block is *reported*, the binaries round-trip to 0, and every recorded number reconciles — but the field overstates its own precision. A `git_dirty` flag would fix it; adding one now would mean rebuilding `v1` after test has been read, which is exactly what must not happen. Noted for `v2` | §8 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---
