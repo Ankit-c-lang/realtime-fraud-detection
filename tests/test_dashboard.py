@@ -319,7 +319,12 @@ def test_the_app_renders_without_exceptions() -> None:
 
 
 def test_every_planned_panel_is_present() -> None:
-    """§11 lists six panels; a silently dropped one would be easy to miss."""
+    """§11 lists six panels; a silently dropped one would be easy to miss.
+
+    The set must be the same with or without scored output — CI has none. A panel that
+    disappears when its source is empty reads as a broken page, so every panel renders
+    its heading and says it is waiting.
+    """
     from streamlit.testing.v1 import AppTest
 
     app_test = AppTest.from_file(str(PROJECT_ROOT / "dashboard" / "app.py"), default_timeout=90)

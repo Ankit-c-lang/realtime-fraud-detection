@@ -311,18 +311,27 @@ def render_alerts() -> None:
 
 @st.fragment(run_every=SLOW_REFRESH)
 def render_leaderboards() -> None:
-    """Where the alerts are concentrating."""
+    """Where the alerts are concentrating.
+
+    The headings render even with no data, like every other panel. A panel that vanishes
+    when its source is empty reads as a broken page rather than an idle one, and the
+    layout shifting under the operator once the replay starts is its own small lie.
+    """
     handle, ready = connection()
-    if not ready:
-        return
 
     left, right = st.columns(2)
     with left:
         st.subheader("Top merchants by alerts")
-        st.dataframe(top_merchants(handle), hide_index=True, width="stretch")
+        if ready:
+            st.dataframe(top_merchants(handle), hide_index=True, width="stretch")
+        else:
+            st.info("No scored output yet.")
     with right:
         st.subheader("Top accounts by alerts")
-        st.dataframe(top_accounts(handle), hide_index=True, width="stretch")
+        if ready:
+            st.dataframe(top_accounts(handle), hide_index=True, width="stretch")
+        else:
+            st.info("No scored output yet.")
 
 
 def render_alert_detail() -> None:
