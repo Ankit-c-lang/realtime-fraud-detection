@@ -10,49 +10,49 @@ that task. Source of truth for *what* to build is `PLAN.md`; this file only trac
 - **Phase 3 progress:** 6 / 6 ✅ (E3 ablation belongs to Phase 4)
 - **Phase 4 progress:** 6 / 6 ✅
 - **Phase 5 progress:** 8 / 8 ✅ — **COMPLETE**, test split evaluated once on 2026-09-21
-- **Phase 6 progress:** 2 / 7
-- **Overall:** 45 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Phase 6 progress:** 3 / 9 — **P6.2 complete**
+- **Overall:** 46 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Nothing — P6.2 (replayer) is done and the scorer has deliberately not been started.**
+**Nothing — P6.2 is complete. The scorer has deliberately not been started.**
 
-`stream/replayer.py` is in, plus `configs/stream.yaml` (listed in PLAN §16 but not yet
-written) and `TransactionEvent.from_message`. **524 tests green: 473 unit + 51 Redis
-integration** on DB 15.
+`storage/parquet_io.py`, `storage/duck.py` and `stream/sink.py` are in, closing the
+remainder of PLAN's P6.2. **556 tests green: 505 unit + 51 Redis integration.**
 
 What the tests establish:
 
-- **Total ordering.** `(event_time, txn_id)`, not just event time — the real window has
-  **5,260 tied timestamps**, so "sorted by time" would leave their order undefined and
-  the §9.6 re-score check comparing two different orders.
-- **Label-free messages.** Checked at load (refuses a labelled `events.parquet`) and per
-  message; a test also pins that no label name is in `EVENT_FIELDS` at all.
-- **All three pacing modes**, on an injected clock so the suite never really sleeps.
-- **Backpressure hysteresis.** Pauses above 20,000 lag, keeps sleeping through 19,000 and
-  9,000, resumes only under 5,000; an unknown (`None`) lag does not stall.
+- **Atomic writes.** Every Parquet write lands as `<name>.parquet.tmp` then `os.replace`.
+  A test patches `os.replace` to fail and asserts no readable file appears *and* no
+  `.tmp` litter is left. Readers glob `*.parquet`, so a temp file is invisible by
+  construction rather than by convention.
+- **Ack ordering.** `flush()` returns exactly the ids it made durable, so the scorer can
+  only `XACK` what survives a crash; the ids never reach a Parquet column.
+- **Deduplication.** §9.3's crash-between-flush-and-ack case is *allowed*, so the DuckDB
+  view resolves it — writing the same rows twice yields 2 files and 3 rows, keeping the
+  earliest `scored_ts`.
+- **Date partitioning on event time**, splitting a batch that crosses midnight, so a
+  3600x replay partitions exactly as a live run would.
+- **Flush policy** ≥ 2,000 rows or 2 s, on an injected clock.
 
-Smoke-tested on real data: `--max --limit 2000` put 2,000 events on `txn:events` in
-0.11s, 16 fields each, zero label fields, and `from_message` rebuilt the first one.
+Smoke-tested end to end on real output: 500 rows scored through `models/v1` → one Parquet
+file → DuckDB dedup view → all three §9.4 monitoring queries returning (riskiest
+merchants, hourly alert rate, latency percentiles).
 
 Phase 5 outputs untouched: `sim.yaml` still `4013268a…`, `models/v1` still PR-AUC
-0.99377 valid / 0.99379 test at threshold 0.5128232795323753, `reports/` unchanged,
-`test_runs.log` still one line.
-
-⚠️ **Not done, and still part of PLAN's own P6.2:** `storage/parquet_io.py`,
-`storage/duck.py` and `stream/sink.py` (+ `test_sink.py`). Scoped out by request; the
-scorer needs them, so they come before or with P6.3.
+0.99377 valid / 0.99379 test, `reports/` and `models/` byte-unchanged, `test_runs.log`
+still one line.
 
 ---
 
 ## Next up (in order)
 
-1. **P6.2 remainder** — `storage/parquet_io.py` (atomic temp-file + rename), `storage/duck.py` (the §9.4 deduplicating view), `stream/sink.py` (buffer, flush policy, watermark) + `test_sink.py`.
-2. **P6.3** — `stream/scorer.py` and `stream/recovery.py`: consumer group, pending drain at startup, `XPENDING`/`XCLAIM` reclaim with the delivery-count DLQ rule, graph snapshot resolved before commit, `XACK` only after the sink flush, `meta:state_version` check (`RedisStore.check_state_version` is ready).
-3. **P6.4** — `stream/backfill.py` and the §9.6 re-score check.
-4. **Phase 7** — FastAPI (`/score` must never write state).
+1. **P6.3** — `stream/scorer.py` and `stream/recovery.py`: consumer group, pending drain at startup, `XPENDING`/`XCLAIM` reclaim with the delivery-count DLQ rule, graph snapshot resolved before commit, `XACK` only after the sink flush, `meta:state_version` check (`RedisStore.check_state_version` is ready). Plus `test_scorer_recovery.py` with the `crash_after=` hook covering every row of the §9.3 failure matrix.
+2. **P6.4** — `stream/backfill.py` (§9.5), `graph/refresh_live.py` (§6.5), `scripts/rescore_check.py` (§9.6).
+3. **Phase 7** — FastAPI (`/score` must never write state).
+4. **Phase 8** — the Streamlit dashboard, reading through `storage/duck.py`.
 
 ---
 
@@ -138,6 +138,7 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-21 | 5 | **Phase 5 closed.** 🚩 Day-8 checkpoint met | 440 tests green |
 | 2026-09-21 | 6 | `features/store_redis.py` — `RedisStore` on the §3.6 key schema: pipelined load, one `MULTI/EXEC` commit, `ZADD GT`, `ZCOUNT` with an exclusive upper bound, periodic trim, `meta:state_version` guard | `tests/test_parity_redis.py` 19 + `tests/test_idempotency.py` 15, on DB 15 |
 | 2026-09-21 | 6 | `stream/replayer.py` + `configs/stream.yaml` + `TransactionEvent.from_message` — three pacing modes, total ordering, label-free messages, backpressure with hysteresis | `tests/test_replayer.py` 45 (33 unit + 12 Redis); smoke: 2,000 real events onto `txn:events` |
+| 2026-09-21 | 6 | `storage/parquet_io.py` (atomic temp+rename), `storage/duck.py` (§9.4 deduplicating view + the three monitoring queries), `stream/sink.py` (buffer, flush policy, watermark, per-date files) | `tests/test_sink.py` 32; smoke: 500 real scored rows through sink → DuckDB |
 
 ---
 
@@ -207,16 +208,16 @@ before continuing — do not silently slip.
 - [x] 8. `test_scoring.py` (31) + `test_reason_codes.py` (16) ✅ 2026-09-20 · `test_training_smoke.py` part 2 still open
 - **🚩 CHECKPOINT (end of Day 8): MET ✅ 2026-09-21** — `models/v1/` and `reports/results.md` exist; `reports/test_runs.log` has exactly one line.
 
-### Phase 6 — Streaming pipeline (Days 9-10, ~16 h, 7/10) — IN PROGRESS (2 / 7)
+### Phase 6 — Streaming pipeline (Days 9-10, ~16 h, 7/10) — IN PROGRESS (3 / 9), P6.1 + P6.2 complete
 - [x] 1. `features/store_redis.py` **first**, + `test_parity_redis.py` (19) + `test_idempotency.py` (15) ✅ 2026-09-21
 - [x] 2. `stream/replayer.py` — pacing, label stripping, backpressure ✅ 2026-09-21 (`tests/test_replayer.py`, 45)
-- [ ] 3. `stream/sink.py` + `storage/parquet_io.py` + `storage/duck.py` — atomic writes, watermark, dedup view
+- [x] 3. `stream/sink.py` + `storage/parquet_io.py` + `storage/duck.py` — atomic writes, watermark, dedup view ✅ 2026-09-21 (`tests/test_sink.py`, 32)
 - [ ] 4. `stream/scorer.py` — micro-batch loop, pending drain/reclaim, DLQ, ack-after-flush, HOLD, metrics, SIGTERM, `crash_after` hook
 - [ ] 5. `stream/backfill.py` (§9.5)
 - [ ] 6. `graph/refresh_live.py` (§6.5)
 - [ ] 7. `scripts/rescore_check.py` (§9.6)
 - [ ] 8. End-to-end run: full test window at 3,600x (replayer + scorer + graph-refresh)
-- [ ] 9. `test_scorer_recovery.py`, `test_sink.py`, `test_replayer.py`, `test_graph_live.py`
+- [ ] 9. `test_scorer_recovery.py` and `test_graph_live.py` (`test_sink.py` ✅ 32, `test_replayer.py` ✅ 45)
 - **🚩 CHECKPOINT (end of Day 10): test window replays end to end; re-score check 100% identical;** live snapshot == offline for 3 boundaries
 
 ### Phase 7 — FastAPI (Day 11 am, ~5 h, 3/10)
@@ -352,6 +353,9 @@ again in either file.
 | 2026-09-21 | Stream order is `(event_time, txn_id)`, not `event_time` alone | The replay window has **5,260 tied timestamps**. §9.1 only says "asserts that events are sorted", which leaves ties undefined; the simulator assigns `txn_id` after sorting by time, so this pair is a total order that reproduces the offline replay exactly. Without it the §9.6 re-score check would compare two legitimately different orderings and fail for no reason | §4.2, §9.1, §9.6 |
 | 2026-09-21 | Redis integration tests are auto-marked from the `redis_client` fixture | `make test` deselects `-m redis`, and the first test that forgot the marker would fail in CI with a bare connection error. `pytest_collection_modifyitems` now derives the marker from fixture use, so it cannot be forgotten | §13 |
 | 2026-09-21 | `TransactionEvent.from_message` lives in `schemas.py`, shared by producer and consumer | Redis returns every field as a string. If the scorer cast them its own way, a disagreement about `amount` or `event_time` would not raise — it would quietly produce different features online than offline. One shared cast next to `EVENT_FIELDS` removes the possibility | §3.5 |
+| 2026-09-21 | The sink resumes its file sequence from disk instead of restarting at `000000` | §9.4 names files `part-<consumer>-<seq:06d>.parquet` but says nothing about restarts. A restarted scorer with the same consumer name would begin again at `000000` and **overwrite its predecessor's output**, losing scored rows with no error anywhere. `ParquetSink` scans `data/scored/*/part-<consumer>-*.parquet` at construction and continues from the highest number found | §9.4, invariant 7 |
+| 2026-09-21 | `storage/duck.py` defines an empty placeholder view when no scored Parquet exists yet | `read_parquet` raises on a glob matching nothing, and the dashboard starts before the scorer has written anything. Rather than make every caller handle a missing relation, `connect()` defines `scored` as a zero-row view carrying only `txn_id` until real files appear, with `has_scored_data()` available to distinguish the two states | §9.4, §11 |
+| 2026-09-21 | The §9.4 monitoring queries live in `storage/duck.py`, not copied into the README and the dashboard | §9.4 says they go in both. Two copies drift, and §0.4 requires the number in the README to be the number the system shows. One definition, imported by both | §0.4, §9.4 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---

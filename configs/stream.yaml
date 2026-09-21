@@ -31,3 +31,9 @@ replayer:
   # Wall-clock compression when neither --rate nor --max is given: 3600 replays an hour
   # of event time per second, so the 18-day test window takes about seven minutes.
   default_speedup: 3600
+
+sink:
+  # Flush policy (PLAN §9.2). Whichever comes first: enough rows to make a Parquet file
+  # worth writing, or enough time that a quiet stream still reaches the dashboard.
+  max_rows: 2000
+  max_seconds: 2.0
