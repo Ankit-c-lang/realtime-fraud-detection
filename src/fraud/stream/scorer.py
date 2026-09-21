@@ -172,6 +172,9 @@ class Scorer:
         self.metrics = ScorerMetrics()
         # What has already been added to metrics:scorer, so each publish sends a delta.
         self._published: dict[str, int] = {}
+        # End-to-end latencies for rows buffered but not yet flushed. Published with the
+        # flush, so a sample only ever describes a row that actually became durable.
+        self._latencies: list[int] = []
 
     # --- startup (PLAN §9.2) ---
 
@@ -380,6 +383,11 @@ class Scorer:
                 "stream_id": item.message_id,
             }
             rows.append(row)
+            if item.ingest_ts:
+                # §9.6's end-to-end measure: stream write to score. Rows with no
+                # ingest_ts came from something other than the replayer, and would
+                # otherwise contribute a meaningless ~1.7e12 ms sample.
+                self._latencies.append(scored_ts - item.ingest_ts)
 
             if decision != ALLOW:
                 self.metrics.alerts += 1
@@ -450,6 +458,8 @@ class Scorer:
         self._maybe_crash("ack")
         self._redis.xack(self._stream, self._group, *result.message_ids)
         self._publish(result.watermark, len(result.message_ids))
+        self.record_latency(self._latencies)
+        self._latencies.clear()
 
     def _publish(self, watermark: datetime | None, acked: int) -> None:
         pipe = self._redis.pipeline(transaction=False)

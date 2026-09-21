@@ -771,6 +771,60 @@ def test_latency_samples_are_bounded(redis_client: Redis, tmp_path: Path) -> Non
     assert redis_client.llen(LATENCY_KEY) == load_yaml("stream")["scorer"]["latency_keep"]
 
 
+def test_latency_is_actually_recorded_on_flush(redis_client: Redis, tmp_path: Path) -> None:
+    """§9.2 records this on every flush; /metrics reports p50/p95 from it.
+
+    The method existed but nothing called it, so `latency_p50_ms` was null on a live
+    system that had scored 80,087 events.
+    """
+    from fraud.stream.scorer import LATENCY_KEY
+
+    _publish(redis_client, _events(3))
+    scorer = _scorer(redis_client, tmp_path)
+    scorer.startup()
+    scorer.run_once()
+    scorer._flush_and_ack(force=True)
+
+    samples = [float(value) for value in redis_client.lrange(LATENCY_KEY, 0, -1)]
+    assert len(samples) == 3
+    # ingest_ts is stamped by the replayer moments ago, so these are small and positive.
+    assert all(0 <= value < 600_000 for value in samples)
+
+
+def test_latency_is_not_recorded_twice(redis_client: Redis, tmp_path: Path) -> None:
+    """The buffer is cleared with the flush, or every flush would re-publish it."""
+    from fraud.stream.scorer import LATENCY_KEY
+
+    _publish(redis_client, _events(2))
+    scorer = _scorer(redis_client, tmp_path)
+    scorer.startup()
+    scorer.run_once()
+    scorer._flush_and_ack(force=True)
+    scorer._flush_and_ack(force=True)
+
+    assert redis_client.llen(LATENCY_KEY) == 2
+
+
+def test_a_message_without_an_ingest_ts_records_no_latency(
+    redis_client: Redis, tmp_path: Path
+) -> None:
+    """A raw XADD has no ingest_ts; a sample from epoch would poison the percentiles."""
+    from fraud.schemas import EVENT_FIELDS
+    from fraud.stream.scorer import LATENCY_KEY
+
+    stream, _ = _stream_group(redis_client)
+    scorer = _scorer(redis_client, tmp_path)
+    scorer.startup()
+    event = _events(1)[0]
+    redis_client.xadd(stream, {field: str(getattr(event, field)) for field in EVENT_FIELDS})
+
+    scorer.run_once()
+    scorer._flush_and_ack(force=True)
+
+    assert len(_scored_rows(tmp_path)) == 1
+    assert redis_client.llen(LATENCY_KEY) == 0
+
+
 # --- startup refusals (PLAN §8) -------------------------------------------------------
 
 
