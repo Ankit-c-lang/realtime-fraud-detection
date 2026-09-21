@@ -43,3 +43,15 @@ night_hours: [0, 5]
 
 # Devices last used longer ago than this drop out of the account blob.
 device_retention_days: 90
+
+# Online state backend (PLAN §3.6, §5.3-§5.4). These govern retention and housekeeping
+# in Redis, not what any feature means, so they are outside FEATURE_SPEC_VERSION.
+redis:
+  # feat:{txn_id} only has to outlive a redelivery, and §3.6 puts that at 48 hours.
+  feature_ttl_seconds: 172800
+  # Entity sorted sets are trimmed to the longest window that reads them (30 days).
+  # Anything older can never be counted again, so dropping it is free.
+  entity_retention_seconds: 2592000
+  # Trim every N commits rather than on every one: ZREMRANGEBYSCORE on three keys per
+  # event would dominate the commit for work that is almost always a no-op.
+  trim_every: 200

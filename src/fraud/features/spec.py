@@ -107,10 +107,15 @@ class FeatureConfig:
     night_start: int
     night_end: int
     device_retention_days: int
+    # Online backend only (PLAN §3.6). Not part of any feature definition.
+    redis_feature_ttl_seconds: int
+    redis_entity_retention_seconds: int
+    redis_trim_every: int
 
     @classmethod
     def load(cls) -> FeatureConfig:
         raw = load_yaml("features")
+        redis_cfg = raw["redis"]
         windows = raw["windows"]
         defaults = raw["defaults"]
         zscore = raw["amount_zscore"]
@@ -139,4 +144,7 @@ class FeatureConfig:
             night_start=int(night_start),
             night_end=int(night_end),
             device_retention_days=int(raw["device_retention_days"]),
+            redis_feature_ttl_seconds=int(redis_cfg["feature_ttl_seconds"]),
+            redis_entity_retention_seconds=int(redis_cfg["entity_retention_seconds"]),
+            redis_trim_every=int(redis_cfg["trim_every"]),
         )

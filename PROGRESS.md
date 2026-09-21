@@ -10,39 +10,42 @@ that task. Source of truth for *what* to build is `PLAN.md`; this file only trac
 - **Phase 3 progress:** 6 / 6 ✅ (E3 ablation belongs to Phase 4)
 - **Phase 4 progress:** 6 / 6 ✅
 - **Phase 5 progress:** 8 / 8 ✅ — **COMPLETE**, test split evaluated once on 2026-09-21
-- **Overall:** 43 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Phase 6 progress:** 1 / 7
+- **Overall:** 44 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Nothing — Phase 5 is closed. Phase 6 has not been started.**
+**Nothing — P6.1 is done and the replayer/scorer have deliberately not been started.**
 
-The 🚩 Day-8 checkpoint is met: `models/v1/` exists, `reports/results.md` exists, and
-`reports/test_runs.log` holds **exactly one line**.
+`features/store_redis.py` is in, with `RedisStore` implementing the §5.4 `StateStore`
+protocol against the §3.6 key schema. 479 tests green: 440 unit + **39 Redis
+integration** on DB 15.
 
-Headline, from the single test evaluation (2026-09-21T01:59:13Z, commit `0d30e50`):
-**PR-AUC 0.9938 on test against 0.9938 on validation** — the model did not overfit the
-split it was tuned on.
+What the integration tests establish:
 
-Two things are reported rather than fixed, both in `reports/results.md`:
+- **Feature parity with `InMemoryStore`** over single-account, shared-entity, decline-heavy
+  and 120-event mixed sequences — compared feature by feature across all 30 hot features.
+- **Half-open windows survive the translation.** `ZCOUNT low (high` matches the memory
+  store's bisect: exactly one hour back is in, a millisecond older is out, and an event
+  never counts itself.
+- **Atomic commits.** One `MULTI/EXEC` per event; a failure while building it writes nothing.
+- **Duplicate delivery changes nothing** — the whole database is snapshotted before and
+  after a redelivery and compared literally, including sorted-set scores.
 
-- **Test alert rate 2.09% exceeds the 2% review budget.** The threshold was frozen on
-  validation and deliberately not re-tuned (§7.11). The cause is prevalence: the test
-  window carries 2.01% fraud against validation's 1.34%, 1.51x as much, and at 99.3%
-  recall alerts track the fraud count. E2 (2.08%) and E3 (2.10%) overshoot identically,
-  so it is not specific to the blend.
-- **HOLD stayed disabled.** It was switched off when thresholds were chosen on
-  validation, before test was read, and the artifact was not rebuilt afterwards.
+Phase 5 outputs are untouched: `sim.yaml` still hashes to `4013268a…`, `models/v1`
+metadata still reads PR-AUC 0.99377 valid / 0.99379 test at threshold 0.5128232795323753,
+and `reports/test_runs.log` still holds one line.
 
 ---
 
 ## Next up (in order)
 
-1. **P6.1** — `features/store_redis.py` **first**: one pipeline for load, one `MULTI/EXEC` for commit, `ZADD`/`ZCOUNT` with an exclusive upper bound, periodic trimming, `decode_responses=True`. Plus `test_parity_redis.py` and `test_idempotency.py`.
-2. **P6.2** — `stream/replayer.py`: pacing, label stripping, backpressure.
-3. **P6.3** — `stream/scorer.py`: consumer group, idempotent per-event commit, `XACK` only after the sink flush.
-4. **P6.4** — `stream/recovery.py`, `backfill.py`, and the §9.6 re-score check.
+1. **P6.2** — `stream/replayer.py`: pacing, label stripping, backpressure.
+2. **P6.3** — `stream/scorer.py`: consumer group, idempotent per-event commit, `XACK` only after the sink flush, `meta:state_version` check on startup (`RedisStore.check_state_version` is already there for it).
+3. **P6.4** — `stream/recovery.py`, `stream/backfill.py`, and the §9.6 re-score check.
+4. **Phase 7** — FastAPI (`/score` must never write state).
 
 ---
 
@@ -126,6 +129,7 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-21 | 5 | **Test split evaluated once** (user-run). Test PR-AUC **0.9938** vs valid 0.9938; recall 0.993, precision 0.958, VDR 0.996; RING 0.99, ATO/CT 1.00, VEL 0.97 | `reports/test_runs.log` (1 line), `models/v1/metadata.json` `metrics.test`, `reports/experiments/E{1,2,3,4}_test.json` |
 | 2026-09-21 | 5 | Report generator now states the **2.09% test alert rate vs the 2% budget** with its cause, the test-run provenance line, and that **HOLD was disabled before test and unchanged** | `reports/results.md`; `tests/test_evaluate_test.py` 24 passed |
 | 2026-09-21 | 5 | **Phase 5 closed.** 🚩 Day-8 checkpoint met | 440 tests green |
+| 2026-09-21 | 6 | `features/store_redis.py` — `RedisStore` on the §3.6 key schema: pipelined load, one `MULTI/EXEC` commit, `ZADD GT`, `ZCOUNT` with an exclusive upper bound, periodic trim, `meta:state_version` guard | `tests/test_parity_redis.py` 19 + `tests/test_idempotency.py` 15, on DB 15 |
 
 ---
 
@@ -195,8 +199,8 @@ before continuing — do not silently slip.
 - [x] 8. `test_scoring.py` (31) + `test_reason_codes.py` (16) ✅ 2026-09-20 · `test_training_smoke.py` part 2 still open
 - **🚩 CHECKPOINT (end of Day 8): MET ✅ 2026-09-21** — `models/v1/` and `reports/results.md` exist; `reports/test_runs.log` has exactly one line.
 
-### Phase 6 — Streaming pipeline (Days 9-10, ~16 h, 7/10)
-- [ ] 1. `features/store_redis.py` **first**, + `test_parity_redis.py` + `test_idempotency.py`
+### Phase 6 — Streaming pipeline (Days 9-10, ~16 h, 7/10) — IN PROGRESS (1 / 7)
+- [x] 1. `features/store_redis.py` **first**, + `test_parity_redis.py` (19) + `test_idempotency.py` (15) ✅ 2026-09-21
 - [ ] 2. `stream/replayer.py` — pacing, label stripping, backpressure
 - [ ] 3. `stream/sink.py` + `storage/parquet_io.py` + `storage/duck.py` — atomic writes, watermark, dedup view
 - [ ] 4. `stream/scorer.py` — micro-batch loop, pending drain/reclaim, DLQ, ack-after-flush, HOLD, metrics, SIGTERM, `crash_after` hook
@@ -332,6 +336,10 @@ again in either file.
 | 2026-09-21 | **Test alert rate 2.09% breaches the 2% review budget — reported, not fixed** | The threshold is frozen on validation (1.37% there) and §7.11 forbids re-tuning it on test, so the breach is published rather than corrected. It is prevalence, not drift: test carries 2.01% fraud against validation's 1.34% (2,075 of 102,987 rows), 1.51x as much, and at 99.3% recall the alert count tracks the fraud count almost exactly. E2 (2.08%) and E3 (2.10%) overshoot by the same margin, ruling out anything specific to the blend. In production this is precisely what a budget is for: it surfaces as a capacity breach and the threshold rises in the next model version, trading recall for load | §7.7, §7.8, §7.11 |
 | 2026-09-21 | **HOLD was disabled before the test split was read, and nothing was rebuilt afterwards** | Verifiable rather than asserted: `models/v1/metadata.json` has `created_at` 01:48:13Z with the `thresholds` block already disabled, the single `reports/test_runs.log` line is 01:59:13Z, and every model binary (`xgb.ubj`, `iforest.joblib`, `anomaly_quantiles.npy`, `feature_stats.json`) still carries its 01:48 timestamp — only `metadata.json` was touched, by the run filling `metrics.test`. The test evaluation applied the stored policy and recorded `enabled: false, source: "policy"`, 0 HOLD decisions | §7.11, §8 |
 | 2026-09-21 | `metadata.git_commit` records HEAD at build time and does not flag a dirty tree | `models/v1` was built at 01:48 from a working tree that was committed minutes later as `0d30e50`, so the metadata says `5ba2675` while `test_runs.log` says `0d30e50`. Harmless here — the diff between them changed only how the HOLD block is *reported*, the binaries round-trip to 0, and every recorded number reconciles — but the field overstates its own precision. A `git_dirty` flag would fix it; adding one now would mean rebuilding `v1` after test has been read, which is exactly what must not happen. Noted for `v2` | §8 |
+| 2026-09-21 | **Entity sorted-set scores are epoch milliseconds, not seconds — PLAN contradicts itself** | §3.6's key table says "score = last event time (epoch s)", but §5.1 rule 1, §5.3 and `state.py` all specify milliseconds. Seconds would collapse two events in the same second onto one score and the two stores would then disagree, which is exactly what the parity test exists to catch. A double represents these integers (~1.77e12) exactly, so ZCOUNT boundaries stay crisp. Milliseconds it is; a test pins the unit | §3.6 vs §5.1, §5.3 |
+| 2026-09-21 | A scored event costs **two** Redis round trips, not the one §5.4 sketches | §5.4 describes a load pipeline holding `GET feat:{txn}`, `GET state:acct:{id}` and the five `ZCOUNT`s — but the `StateStore` protocol in the same section hands `committed()` only a `txn_id`, so the entity keys are not knowable there. Implemented as the protocol specifies: one `GET`, then one pipeline of six. Collapsing them means passing the whole event to `committed()`, a protocol change not worth making before Phase 9 measures whether it matters | §5.4 |
+| 2026-09-21 | `configs/features.yaml` gained a `redis:` block **without** bumping `FEATURE_SPEC_VERSION` | Invariant 2 requires a bump when a feature *definition* changes. These three knobs (record TTL, entity retention, trim cadence) govern storage housekeeping in the online backend and cannot alter any computed value — retention equals the longest window, so trimming only removes what no window can reach. `FEATURE_SPEC_VERSION` stays `fs1`, and `models/v1` still loads with its compatibility checks passing | §3.6, §5.3 |
+| 2026-09-21 | Commit rejects a non-JSON `extra` rather than coercing it | `extra` carries `graph_snapshot_ts`. A datetime silently stringified on write would come back as a different type on redelivery, and the §9.6 re-score check compares to 1e-9. `json.dumps` raising is the desired behaviour; a test asserts nothing is written when it does | §5.4, §9.6 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---
