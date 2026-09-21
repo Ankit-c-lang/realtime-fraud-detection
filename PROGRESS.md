@@ -13,65 +13,45 @@ that task. Source of truth for *what* to build is `PLAN.md`; this file only trac
 - **Phase 6 progress:** 9 / 9 ✅ — **COMPLETE**, tagged `phase-6`
 - **Phase 7 progress:** 5 / 5 ✅ — tagged `phase-7`
 - **Phase 8 progress:** 3 / 3 ✅ — tagged `phase-8`
-- **Phase 9 progress:** 7 / 7 ✅ — **PHASE 9 COMPLETE**
-- **Overall:** 67 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Phase 9 progress:** 7 / 7 ✅ — tagged `phase-9`, 3 green CI jobs
+- **Phase 10 progress:** 1 / 5
+- **Overall:** 68 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Nothing — Phase 9 is complete.** The whole stack runs in Compose and is benchmarked.
+**Phase 10 · Task 1 done — `README.md` written.**
 
-### `make up` → `make smoke`
+Follows §17's Phase-10 order exactly: one-paragraph summary with the synthetic-data
+caveat on the first screen, architecture diagram, quickstart, results + ablation,
+benchmark with hardware, design decisions, the §9.3 failure table, limitations, "what I'd
+change at 100×", and the environment actually used.
 
-redis (healthy) → backfill (exits 0) → scorer / graph-refresh / api (healthy) → dashboard.
-`make smoke` replays 2,000 events through the containers and asserts **2,000 unique rows
-from 2,000 raw** plus a healthy `/health`.
+**Every number was verified against `reports/` programmatically**, not by eye. Two were
+wrong and are fixed:
 
-### Benchmark (`reports/benchmark.md`, generated)
+- container memory was rounded (530 MiB) where the report says `529.5MiB` — now quoted
+  exactly, all six services;
+- the HOLD paragraph said precision at the budget was **0.961**, which was the value
+  *before* the margin/HINCRBY fixes in Phases 7–9. The current artifact says **0.960**.
 
-| Micro-batch | 1 | 50 | 200 | 500 |
-|---|---|---|---|---|
-| events/s | 33 | 437 | 588 | **628** |
-
-| Load | Rate | p50 | p95 | p99 |
-|---|---|---|---|---|
-| 50% of capacity | 314/s | 154 ms | 210 ms | 224 ms |
-| 80% of capacity | 503/s | 214 ms | 318 ms | 347 ms |
-
-Container peaks during a Compose replay: graph-refresh 530 MiB, replayer 322 MiB, api
-224 MiB, scorer 223 MiB, redis 56 MiB, dashboard 50 MiB — comfortably inside 7.7 GB.
-
-### Three problems the benchmark itself had
-
-**The first latency numbers were meaningless** (p50 45 s at "50% load"). The harness
-replayed the whole dataset *before* starting the scorer, so every event waited for the
-backlog — precisely the queueing artefact §9.6 says not to publish. The replayer and
-scorer now run concurrently, and the scorer is warmed up first so the opening events do
-not queue behind XGBoost deserialisation.
-
-**Then p95 was worse at 50% load than at 80%** (3.6 s vs 996 ms). Measuring the same
-configuration in isolation gave 225 ms, flat across all ten deciles — the tail was the
-benchmark's own disk traffic from four back-to-back runs, not the scorer. The harness now
-settles for 10 s between runs, and the caveat is in the report.
-
-**The staleness table was mislabelled.** It read as a steady state; in fact graph-refresh
-does not run during the benchmark, so every row resolves the one snapshot the backfill
-published. The report now says so and points at `make rescore-check` for live staleness.
-
-**678 tests green: 555 unit + 150 Redis integration** (plus the CI image checks).
-
-Phase 5 outputs untouched: `sim.yaml` still `4013268a…`, `models/v1` still PR-AUC 0.99377
-valid / 0.99379 test, `test_runs.log` one line.
+The README deliberately leads with the three results that did not go the way I wanted —
+the graph ablation showing redundancy rather than a win, the disabled HOLD tier, and the
+2.09% test alert-rate breach — rather than burying them below the headline table.
 
 ---
 
 ## Next up (in order)
 
-1. **Phase 10 / P10.1** — `README.md` in the §17 Phase-10 order, with the synthetic-data caveat on the first screen. Every number quotable from `reports/`.
-2. **P10.2** — demo recording (2-3 min), including `docker compose restart scorer` mid-replay showing no duplicates.
-3. **P10.3** — CV bullets from `results.md` + `benchmark.md` (§20.3).
-4. **P10.4/5** — interview prep (§21) and a clean-clone rerun: fresh clone → `make setup all up demo` → numbers match `reports/`.
+1. **P10.5 — clean-clone rerun**, moved ahead of the recording: fresh clone → `make setup all up demo` → numbers match `reports/`. If a fresh clone is missing a step, better to find out before filming.
+2. **P10.3 — CV bullets** from `results.md` + `benchmark.md` (§20.3).
+3. **P10.4 — interview prep**, the §21 questions.
+4. **P10.2 — demo recording (2-3 min)**, including `docker compose restart scorer` mid-replay showing no duplicates. **This one is the user's to record**; I will supply the shot list and exact commands.
+
+⚠️ `data/scored/` currently holds only the 15,000-event `bench-docker` run — the full
+window was reset during Phase 9. A full `make demo` replay is needed before the recording
+and as part of the clean-clone check.
 
 ---
 
@@ -190,6 +170,7 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-21 | 7 | **Phase 7 complete.** Latency recording wired into the flush path — `/metrics` percentiles had no data because `record_latency()` was never called | `tests/test_scorer_recovery.py` 44; 800 events → 800 samples → p50 904 ms |
 | 2026-09-21 | 8 | `dashboard/app.py` — six §11 panels on per-panel `st.fragment` clocks, cached DuckDB connection, httpx API calls, scorecard labelled as evaluation data | `tests/test_dashboard.py` 21 incl. `AppTest` render checks; scorecard reproduces E4 test metrics to 4 dp on the real replay |
 | 2026-09-21 | 9 | `Dockerfile` + full `docker-compose.yml` + `make up/demo/logs/demo-reset/smoke`; `scripts/benchmark_stream.py`, `capture_container_memory.sh`, `reports/benchmark.md`; CI grown to 3 jobs | `make smoke`: 2,000 events → 2,000 unique rows; peak **628 events/s**, p50 154 ms at half load |
+| 2026-09-21 | 10 | `README.md` — §17 Phase-10 order, synthetic-data caveat first, every number traced to `reports/` | 2,134 words; automated check of 28 figures against `results.md`, `benchmark.md`, `E5.json`, `manifest.json`, `metadata.json` |
 
 ---
 
@@ -294,7 +275,7 @@ before continuing — do not silently slip.
 - [x] 7. CI: `redis-integration` and `image-build` jobs added (3 jobs) ✅
 
 ### Phase 10 — Documentation, demo, interview prep (Day 13 → Day 14 am, ~10 h, 3/10)
-- [ ] 1. `README.md` in the §17 Phase-10 order (synthetic-data caveat on the first screen)
+- [x] 1. `README.md` in the §17 Phase-10 order (synthetic-data caveat on the first screen) ✅ 2026-09-21 — every figure verified against `reports/`
 - [ ] 2. Demo recording (2-3 min) incl. `docker compose restart scorer` mid-replay showing no duplicates
 - [ ] 3. CV bullets filled from `results.md` + `benchmark.md` (§20.3)
 - [ ] 4. Interview prep — §21 questions, optional `docs/interview_notes.md`
@@ -434,6 +415,7 @@ again in either file.
 | 2026-09-21 | The image drops xgboost's bundled CUDA runtime | 288 MB of NVIDIA libraries that a CPU-only box (§15.2, integrated graphics) can never load. Removed after `uv sync` rather than by switching to the `xgboost-cpu` package, so `uv.lock` — and the host environment that trained `models/v1` — stays byte-identical to what CI resolves. Image content 1.65 GB → 1.4 GB. §2.2 lists a slim serving image as a nice-to-have; this is the part that paid for itself immediately | §12.1, §2.2 |
 | 2026-09-21 | Compose overrides `REDIS_URL`/`DATA_DIR`/`MODEL_DIR`/`API_URL` rather than putting them in `.env` | §12.2 puts `REDIS_URL=redis://redis:6379/0` in `.env`, which breaks every host-side command — `localhost` and `redis` cannot both be right in one file, and §12.2's own "common mistakes" names that trap. `.env` keeps host defaults; the `x-app` anchor overrides the four container-specific values in `environment:`, which takes precedence. `env_file` is `required: false` so a fresh clone starts before anyone copies the template | §12.2 |
 | 2026-09-21 | The `image-build` CI job asserts more than "it built" | A built image that cannot import the package, or that carries pytest and shap, is not a working serving image and `docker build` would still be green. The job imports the four service entrypoints and asserts the dev/sim/analysis groups are absent | §12.1, §14 |
+| 2026-09-21 | README figures are verified against `reports/` by a script, not by eye | §0.4 requires every published number to come from a file. Checking by hand is how a stale figure survives: the draft quoted container memory rounded to `530 MiB` where the report says `529.5MiB`, and quoted HOLD-tier precision as `0.961` — correct three phases ago, but the margin and HINCRBY fixes moved it to `0.960`. Both were caught by comparing the README against the artifacts programmatically | §0.4 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---
