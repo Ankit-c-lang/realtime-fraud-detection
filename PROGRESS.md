@@ -14,44 +14,53 @@ that task. Source of truth for *what* to build is `PLAN.md`; this file only trac
 - **Phase 7 progress:** 5 / 5 ✅ — tagged `phase-7`
 - **Phase 8 progress:** 3 / 3 ✅ — tagged `phase-8`
 - **Phase 9 progress:** 7 / 7 ✅ — tagged `phase-9`, 3 green CI jobs
-- **Phase 10 progress:** 1 / 5
-- **Overall:** 68 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Phase 10 progress:** 2 / 5
+- **Overall:** 69 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Phase 10 · Task 1 done — `README.md` written.**
+**Phase 10 · Task 5 done — the clean-clone rerun reproduces everything.**
 
-Follows §17's Phase-10 order exactly: one-paragraph summary with the synthetic-data
-caveat on the first screen, architecture diagram, quickstart, results + ablation,
-benchmark with hardware, design decisions, the §9.3 failure table, limitations, "what I'd
-change at 100×", and the environment actually used.
+Cloned to a fresh directory (no `data/`, empty `models/`), then `make setup all up demo`.
 
-**Every number was verified against `reports/` programmatically**, not by eye. Two were
-wrong and are fixed:
+### Byte-identical, not merely close
 
-- container memory was rounded (530 MiB) where the report says `529.5MiB` — now quoted
-  exactly, all six services;
-- the HOLD paragraph said precision at the budget was **0.961**, which was the value
-  *before* the margin/HINCRBY fixes in Phases 7–9. The current artifact says **0.960**.
+| Artifact | Original | Clone |
+|---|---|---|
+| `data/raw/events.parquet` | `68f222a7b2a9c4ee` | **same** |
+| `data/raw/labels.parquet` | `08d4c5ee580685e7` | **same** |
+| `data/raw/accounts.parquet` | `e503acc0ff1cd90d` | **same** |
+| `data/features/hot_features.parquet` | `96d11eb497a8bcdd` | **same** |
+| `data/features/training_table.parquet` | `1b6481e4a5d875b8` | **same** |
 
-The README deliberately leads with the three results that did not go the way I wanted —
-the graph ablation showing redundancy rather than a win, the disabled HOLD tier, and the
-2.09% test alert-rate breach — rather than burying them below the headline table.
+Model metrics match to full float precision — `valid.pr_auc` `0.9937680386465483`,
+threshold `0.5128232795323753`, `alerts` 909, `blend_weight` 0.5, per-pattern recall
+identical — and `metrics.test` is **null**, so the clone did not read the test split.
+
+The Compose stack came up on freshly generated data and replayed 3,000 events to 3,000
+unique rows; `rescore_check` passed at `0.00e+00`. The clone was then removed.
+
+### Full window re-replayed in the main repo, through containers
+
+102,987 events at 3,600×, 0 pending, 18 snapshots, and `make rescore-check` passing at
+**`max |diff| = 0.00e+00`** on all three comparisons. `data/scored/` now holds the full
+window again, ready for the recording.
+
+`metrics:scorer events` reads **102,987**, exactly matching the stream — the first full
+run since the HINCRBY fix, where the old `HSET` version reset the counter mid-run.
 
 ---
 
 ## Next up (in order)
 
-1. **P10.5 — clean-clone rerun**, moved ahead of the recording: fresh clone → `make setup all up demo` → numbers match `reports/`. If a fresh clone is missing a step, better to find out before filming.
-2. **P10.3 — CV bullets** from `results.md` + `benchmark.md` (§20.3).
-3. **P10.4 — interview prep**, the §21 questions.
-4. **P10.2 — demo recording (2-3 min)**, including `docker compose restart scorer` mid-replay showing no duplicates. **This one is the user's to record**; I will supply the shot list and exact commands.
+1. **P10.3 — CV bullets** from `results.md` + `benchmark.md` (§20.3).
+2. **P10.4 — interview prep**, the §21 questions, optionally into `docs/interview_notes.md`.
+3. **P10.2 — demo recording (2-3 min)** — **the user records this**; I supply the shot list and exact commands, including `docker compose restart scorer` mid-replay showing no duplicates.
 
-⚠️ `data/scored/` currently holds only the 15,000-event `bench-docker` run — the full
-window was reset during Phase 9. A full `make demo` replay is needed before the recording
-and as part of the clean-clone check.
+The stack is up and `data/scored/` holds the full 102,987-row window, so the recording can
+be made without regenerating anything.
 
 ---
 
@@ -171,6 +180,7 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-21 | 8 | `dashboard/app.py` — six §11 panels on per-panel `st.fragment` clocks, cached DuckDB connection, httpx API calls, scorecard labelled as evaluation data | `tests/test_dashboard.py` 21 incl. `AppTest` render checks; scorecard reproduces E4 test metrics to 4 dp on the real replay |
 | 2026-09-21 | 9 | `Dockerfile` + full `docker-compose.yml` + `make up/demo/logs/demo-reset/smoke`; `scripts/benchmark_stream.py`, `capture_container_memory.sh`, `reports/benchmark.md`; CI grown to 3 jobs | `make smoke`: 2,000 events → 2,000 unique rows; peak **628 events/s**, p50 154 ms at half load |
 | 2026-09-21 | 10 | `README.md` — §17 Phase-10 order, synthetic-data caveat first, every number traced to `reports/` | 2,134 words; automated check of 28 figures against `results.md`, `benchmark.md`, `E5.json`, `manifest.json`, `metadata.json` |
+| 2026-09-21 | 10 | **Clean-clone rerun**: fresh clone → `make setup all up demo` | 5/5 parquet files byte-identical (SHA-256), model metrics identical to full float precision, `metrics.test` null; full window re-replayed through Compose, `rescore-check` `0.00e+00` |
 
 ---
 
@@ -279,7 +289,7 @@ before continuing — do not silently slip.
 - [ ] 2. Demo recording (2-3 min) incl. `docker compose restart scorer` mid-replay showing no duplicates
 - [ ] 3. CV bullets filled from `results.md` + `benchmark.md` (§20.3)
 - [ ] 4. Interview prep — §21 questions, optional `docs/interview_notes.md`
-- [ ] 5. **Clean-clone rerun**: fresh clone → `make setup all up demo` → numbers match `reports/`
+- [x] 5. **Clean-clone rerun**: fresh clone → `make setup all up demo` → numbers match `reports/` ✅ 2026-09-21 — all five parquet files byte-identical, every metric to full precision
 
 ### NICE TO HAVE — only after every MUST item is done, in this order (§2.2)
 - [ ] Partitioned streams (K = 2-4) + scaling benchmark
