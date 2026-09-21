@@ -102,3 +102,6 @@ backfill:  ## Load the checkpoint and first snapshot into Redis (PLAN §9.5)
 
 graph-refresh:  ## Publish live graph snapshots while the replay runs (PLAN §6.5)
 	$(RUN) python -m fraud.graph.refresh_live
+
+api:  ## Run the FastAPI service on :8000 (PLAN §10)
+	$(RUN) uvicorn fraud.api.main:app --host 0.0.0.0 --port 8000

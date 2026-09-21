@@ -10,61 +10,39 @@ that task. Source of truth for *what* to build is `PLAN.md`; this file only trac
 - **Phase 3 progress:** 6 / 6 ✅ (E3 ablation belongs to Phase 4)
 - **Phase 4 progress:** 6 / 6 ✅
 - **Phase 5 progress:** 8 / 8 ✅ — **COMPLETE**, test split evaluated once on 2026-09-21
-- **Phase 6 progress:** 9 / 9 ✅ — **PHASE 6 COMPLETE**, full window replayed end to end
-- **Overall:** 52 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Phase 6 progress:** 9 / 9 ✅ — **COMPLETE**, tagged `phase-6`
+- **Phase 7 progress:** 1 / 3
+- **Overall:** 53 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Nothing — Phase 6 is complete. The full test window has been replayed end to end.**
+**Nothing — P7.1 is done. The FastAPI service is up with all five §10 endpoints.**
 
-### 🚩 Day-10 checkpoint MET (2026-09-21)
+**681 tests green: 534 unit + 147 Redis integration.**
 
-The 18-day test window replayed at 3,600x through Redis, scored live, with the graph
-refresh publishing snapshots concurrently and the scorer **hard-killed mid-run** and
-restarted.
+### `/score` is read-only, verified against the live database
 
-| | |
-|---|---|
-| Events replayed | **102,987** |
-| Unique scored rows | **102,987** — and 102,987 raw rows, so no duplicate was even produced |
-| Alerts | **2,151 REVIEW**, 0 HOLD (the tier is disabled in v1) |
-| Date partitions / snapshots published | 18 / 18 |
-| Pending at the end | 0 |
-| Watermark | `2026-03-31T23:59:50`, the last event in the window |
+Called with `curl` against the real `models/v1` and the post-replay Redis (**218,588
+keys**). Every value identical before and after: `dbsize`, the `state:acct:A0000001`
+blob hash, all three entity zset cardinalities, and **no `feat:` key was created**. The
+test suite asserts the same thing by snapshotting the whole database around the call.
 
-**`make rescore-check` passes at `max |diff| = 0.00e+00` on all three comparisons** —
-bit-identical, not merely inside the 1e-9 tolerance:
+A live `/score` also resolved the correct graph snapshot (2026-03-20, the boundary at or
+before the event) and returned real reason codes.
 
-```
-re-score        PASS  102,987 rows, max |diff| 0.00e+00 (tolerance 1e-09)
-hot features    PASS  102,987 rows compared across 30 features, max |diff| 0.00e+00
-graph parity    PASS  3 boundaries, max |diff| 0.00e+00
-graph staleness p50 17.1 h, p95 23.5 h, max 33.2 h; 102,987/102,987 rows resolved a snapshot
-```
+### A real finding from that live call
 
-### Live vs offline metrics (§9.6 item 4)
+Scoring an event *older* than the account's last processed transaction produced
+**`secs_since_last = -790,178`** — a negative gap the model has never seen in training,
+so the score is confident-looking and meaningless. §10 says only that this case "is
+documented"; it is now **detected and logged as a warning**, because a silent
+out-of-distribution score is worse than an approximate one.
 
-Every operating-point metric is **identical** to the recorded offline E4 test result:
-
-| Metric | Live | Offline E4 | Δ |
-|---|---|---|---|
-| precision | 0.957694 | 0.957694 | 0 |
-| recall | 0.992771 | 0.992771 | 0 |
-| F1 | 0.974917 | 0.974917 | 0 |
-| alert rate | 0.020886 | 0.020886 | 0 |
-| alerts | 2,151 | 2,151 | 0 |
-| value detection | 0.995852 | 0.995852 | 0 |
-| PR-AUC | 0.993778 | 0.993788 | −9.75e−06 |
-| VEL / ATO / CT / RING recall | 0.9677 / 1.0 / 1.0 / 0.9948 | identical | 0 |
-
-The only difference is PR-AUC at the sixth decimal. Risk scores are bit-identical, so it
-is tie ordering inside `average_precision_score`: the live rows come back ordered by
-`txn_id` and the offline ones in row order, and tied scores rank differently between the
-two. Nothing was tuned, and `metrics.test` was not rewritten.
-
-**633+ tests green: 520 unit + 117 Redis integration.**
+It is caught at the API rather than by changing the feature definition: the engine is
+shared with the offline replay, where events always arrive in time order, and that path
+is verified bit-identical against the live system. Two tests cover it.
 
 Phase 5 outputs untouched: `sim.yaml` still `4013268a…`, `models/v1` still PR-AUC 0.99377
 valid / 0.99379 test, `reports/` and `models/` byte-unchanged, `test_runs.log` one line.
@@ -73,10 +51,12 @@ valid / 0.99379 test, `reports/` and `models/` byte-unchanged, `test_runs.log` o
 
 ## Next up (in order)
 
-1. **Phase 7 / P7.1** — FastAPI per §10: `/health`, `/score` (**must never write state**), `/transactions/{id}`, `/alerts`, `/stats`, with `test_api.py`.
-2. **Phase 8** — the Streamlit dashboard, reading through `storage/duck.py`.
+1. **P7.2** — `/docs` screenshot and the API section of the README (Phase 7 tasks 2-3).
+2. **Phase 8** — the Streamlit dashboard, reading through `storage/duck.py` and the API.
 3. **Phase 9** — Docker Compose, `make smoke`, `make bench`, `reports/benchmark.md`.
 4. **Phase 10** — README, demo recording, interview prep.
+
+Run the API with `make api` (port 8000) and open `/docs`.
 
 ---
 
@@ -191,6 +171,7 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-21 | 6 | `stream/scorer.py` + `stream/recovery.py` + graph keyspace helpers — micro-batch loop, pending drain, `XPENDING`/`XCLAIM` reclaim, DLQ, snapshot-before-commit, HOLD, ack-after-flush, metrics, SIGTERM, `crash_after` | `tests/test_scorer_recovery.py` 37 (every §9.3 row); smoke: 1,500 events → 1,500 unique rows through `models/v1` |
 | 2026-09-21 | 6 | `stream/backfill.py` (§9.5), `graph/refresh_live.py` loop (§6.5), `scripts/rescore_check.py` (§9.6) + `make backfill` / `graph-refresh` / `rescore-check` | `tests/test_graph_live.py` 25 + `tests/test_rescore_check.py` 15; **20,000-event end-to-end run: re-score, hot features and graph parity all `0.00e+00`** |
 | 2026-09-21 | 6 | **Full test window replayed end to end at 3,600x**, scorer SIGKILLed mid-run and restarted, graph refresh concurrent | 102,987 events → 102,987 unique rows, 2,151 alerts; `make rescore-check` `0.00e+00`; live metrics identical to offline E4 |
+| 2026-09-21 | 7 | FastAPI service per §10: Pydantic request models with `extra="forbid"`, lifespan-loaded model/Redis/engine, `/health` `/score` `/alerts` `/transactions/{id}` `/metrics`, 503 on Redis errors, `make api` | `tests/test_api.py` 44; live curl against 218,588-key Redis left every key unchanged |
 
 ---
 
@@ -421,6 +402,9 @@ again in either file.
 | 2026-09-21 | **Bug found by the full-window run: `drain_own_pending` re-read the same page forever** | `XREADGROUP ... STREAMS <stream> 0` returns a consumer's pending entries *from the beginning* every call — it is not a queue that drains as it is read. The loop never advanced its cursor, so on restart it reported draining **19,900** messages when **201** were pending, and handed the scorer the same events repeatedly. Idempotency and the dedup view would have hidden the corruption; the only visible symptom was an absurd log line. Fixed by paging on the last id seen. The existing test used 3 messages against a page size of 200 and could never have caught it, so a 25-message/page-10 regression test was added | §9.2 |
 | 2026-09-21 | **`metrics:scorer` now uses HINCRBY on deltas, as §9.2 specifies** | It had been `HSET` with absolute values, so every scorer restart reset the counters — during the full-window run the published total went from 22,900 back to 0 and climbed again, making "events processed" meaningless on a dashboard and confusing the run's own accounting | §9.2 |
 | 2026-09-21 | Live PR-AUC differs from offline by 9.75e-06; everything else is identical | Risk scores are bit-identical (`rescore-check` reports `0.00e+00`), so this is tie ordering inside `average_precision_score`: the live rows arrive ordered by `txn_id`, the offline ones in row order, and tied scores rank differently. Reported rather than chased; precision, recall, F1, alert rate, alert count, value detection and all four per-pattern recalls match exactly | §9.6 |
+| 2026-09-21 | `TransactionEvent` stays a dataclass; `extra="forbid"` lives on a Pydantic `EventRequest` at the API boundary | §10 says "`TransactionEvent` uses `ConfigDict(extra="forbid")`", which would make it a Pydantic model. The offline replay constructs 494,156 of them, one per event, and that path is now verified bit-identical against the live system — putting validation inside that loop would slow it and perturb a proven path for data our own generator produced. §10 itself says L4 is enforced "at the boundary", and it is: a body carrying `is_fraud` returns 422 | §10, L4 |
+| 2026-09-21 | **Found by a live call: scoring an event older than the account's state yields a negative `secs_since_last`** | A real `/score` for 2026-03-20 against state replayed to 2026-03-31 returned `secs_since_last = -790,178`. The model has never seen a negative gap, so the score is out-of-distribution rather than merely "not point-in-time" as §10 puts it. Now detected and logged as a warning at the API, not fixed in `compute_features`: the engine is shared with the offline replay, where events always arrive in time order, and changing a feature definition there would disturb a path proven bit-identical | §10 |
+| 2026-09-21 | API dependencies use `Annotated[X, Depends(...)]`, not `= Depends(...)` defaults | The default-argument form is a function call evaluated at import (ruff B008) and is no longer FastAPI's idiom | §10 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---
