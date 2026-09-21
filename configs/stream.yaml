@@ -1,0 +1,33 @@
+# Redis Streams wiring (PLAN §3.6, §9.1-§9.2).
+#
+# Names and thresholds only. Nothing here changes what a feature means or how a model
+# scores, so this file sits outside both the sim-v1 freeze and FEATURE_SPEC_VERSION.
+
+stream:
+  # The event stream and its consumer group (§3.6).
+  name: txn:events
+  group: scorers
+  # Approximate trimming: Redis trims to a radix-tree boundary near this length, which
+  # is far cheaper than exact trimming and is why §3.6 writes "MAXLEN ~ 500000".
+  maxlen: 500000
+  # Poison messages land here with their error text (§9.3).
+  dlq: txn:dlq
+  dlq_maxlen: 10000
+
+replayer:
+  # Events per XADD pipeline (§9.1). Large enough to amortise round trips, small enough
+  # that a pause reacts promptly.
+  batch_size: 100
+
+  backpressure:
+    # §9.1. Two thresholds, not one: a single threshold would pause and resume on
+    # alternate checks and spend its time flapping instead of draining.
+    check_every: 1000
+    pause_above: 20000
+    resume_below: 5000
+    # How long to wait between lag checks while paused.
+    poll_seconds: 0.5
+
+  # Wall-clock compression when neither --rate nor --max is given: 3600 replays an hour
+  # of event time per second, so the 18-day test window takes about seven minutes.
+  default_speedup: 3600

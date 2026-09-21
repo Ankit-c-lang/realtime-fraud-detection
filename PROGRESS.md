@@ -10,41 +10,48 @@ that task. Source of truth for *what* to build is `PLAN.md`; this file only trac
 - **Phase 3 progress:** 6 / 6 ✅ (E3 ablation belongs to Phase 4)
 - **Phase 4 progress:** 6 / 6 ✅
 - **Phase 5 progress:** 8 / 8 ✅ — **COMPLETE**, test split evaluated once on 2026-09-21
-- **Phase 6 progress:** 1 / 7
-- **Overall:** 44 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Phase 6 progress:** 2 / 7
+- **Overall:** 45 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Nothing — P6.1 is done and the replayer/scorer have deliberately not been started.**
+**Nothing — P6.2 (replayer) is done and the scorer has deliberately not been started.**
 
-`features/store_redis.py` is in, with `RedisStore` implementing the §5.4 `StateStore`
-protocol against the §3.6 key schema. 479 tests green: 440 unit + **39 Redis
+`stream/replayer.py` is in, plus `configs/stream.yaml` (listed in PLAN §16 but not yet
+written) and `TransactionEvent.from_message`. **524 tests green: 473 unit + 51 Redis
 integration** on DB 15.
 
-What the integration tests establish:
+What the tests establish:
 
-- **Feature parity with `InMemoryStore`** over single-account, shared-entity, decline-heavy
-  and 120-event mixed sequences — compared feature by feature across all 30 hot features.
-- **Half-open windows survive the translation.** `ZCOUNT low (high` matches the memory
-  store's bisect: exactly one hour back is in, a millisecond older is out, and an event
-  never counts itself.
-- **Atomic commits.** One `MULTI/EXEC` per event; a failure while building it writes nothing.
-- **Duplicate delivery changes nothing** — the whole database is snapshotted before and
-  after a redelivery and compared literally, including sorted-set scores.
+- **Total ordering.** `(event_time, txn_id)`, not just event time — the real window has
+  **5,260 tied timestamps**, so "sorted by time" would leave their order undefined and
+  the §9.6 re-score check comparing two different orders.
+- **Label-free messages.** Checked at load (refuses a labelled `events.parquet`) and per
+  message; a test also pins that no label name is in `EVENT_FIELDS` at all.
+- **All three pacing modes**, on an injected clock so the suite never really sleeps.
+- **Backpressure hysteresis.** Pauses above 20,000 lag, keeps sleeping through 19,000 and
+  9,000, resumes only under 5,000; an unknown (`None`) lag does not stall.
 
-Phase 5 outputs are untouched: `sim.yaml` still hashes to `4013268a…`, `models/v1`
-metadata still reads PR-AUC 0.99377 valid / 0.99379 test at threshold 0.5128232795323753,
-and `reports/test_runs.log` still holds one line.
+Smoke-tested on real data: `--max --limit 2000` put 2,000 events on `txn:events` in
+0.11s, 16 fields each, zero label fields, and `from_message` rebuilt the first one.
+
+Phase 5 outputs untouched: `sim.yaml` still `4013268a…`, `models/v1` still PR-AUC
+0.99377 valid / 0.99379 test at threshold 0.5128232795323753, `reports/` unchanged,
+`test_runs.log` still one line.
+
+⚠️ **Not done, and still part of PLAN's own P6.2:** `storage/parquet_io.py`,
+`storage/duck.py` and `stream/sink.py` (+ `test_sink.py`). Scoped out by request; the
+scorer needs them, so they come before or with P6.3.
 
 ---
 
 ## Next up (in order)
 
-1. **P6.2** — `stream/replayer.py`: pacing, label stripping, backpressure.
-2. **P6.3** — `stream/scorer.py`: consumer group, idempotent per-event commit, `XACK` only after the sink flush, `meta:state_version` check on startup (`RedisStore.check_state_version` is already there for it).
-3. **P6.4** — `stream/recovery.py`, `stream/backfill.py`, and the §9.6 re-score check.
+1. **P6.2 remainder** — `storage/parquet_io.py` (atomic temp-file + rename), `storage/duck.py` (the §9.4 deduplicating view), `stream/sink.py` (buffer, flush policy, watermark) + `test_sink.py`.
+2. **P6.3** — `stream/scorer.py` and `stream/recovery.py`: consumer group, pending drain at startup, `XPENDING`/`XCLAIM` reclaim with the delivery-count DLQ rule, graph snapshot resolved before commit, `XACK` only after the sink flush, `meta:state_version` check (`RedisStore.check_state_version` is ready).
+3. **P6.4** — `stream/backfill.py` and the §9.6 re-score check.
 4. **Phase 7** — FastAPI (`/score` must never write state).
 
 ---
@@ -130,6 +137,7 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-21 | 5 | Report generator now states the **2.09% test alert rate vs the 2% budget** with its cause, the test-run provenance line, and that **HOLD was disabled before test and unchanged** | `reports/results.md`; `tests/test_evaluate_test.py` 24 passed |
 | 2026-09-21 | 5 | **Phase 5 closed.** 🚩 Day-8 checkpoint met | 440 tests green |
 | 2026-09-21 | 6 | `features/store_redis.py` — `RedisStore` on the §3.6 key schema: pipelined load, one `MULTI/EXEC` commit, `ZADD GT`, `ZCOUNT` with an exclusive upper bound, periodic trim, `meta:state_version` guard | `tests/test_parity_redis.py` 19 + `tests/test_idempotency.py` 15, on DB 15 |
+| 2026-09-21 | 6 | `stream/replayer.py` + `configs/stream.yaml` + `TransactionEvent.from_message` — three pacing modes, total ordering, label-free messages, backpressure with hysteresis | `tests/test_replayer.py` 45 (33 unit + 12 Redis); smoke: 2,000 real events onto `txn:events` |
 
 ---
 
@@ -199,9 +207,9 @@ before continuing — do not silently slip.
 - [x] 8. `test_scoring.py` (31) + `test_reason_codes.py` (16) ✅ 2026-09-20 · `test_training_smoke.py` part 2 still open
 - **🚩 CHECKPOINT (end of Day 8): MET ✅ 2026-09-21** — `models/v1/` and `reports/results.md` exist; `reports/test_runs.log` has exactly one line.
 
-### Phase 6 — Streaming pipeline (Days 9-10, ~16 h, 7/10) — IN PROGRESS (1 / 7)
+### Phase 6 — Streaming pipeline (Days 9-10, ~16 h, 7/10) — IN PROGRESS (2 / 7)
 - [x] 1. `features/store_redis.py` **first**, + `test_parity_redis.py` (19) + `test_idempotency.py` (15) ✅ 2026-09-21
-- [ ] 2. `stream/replayer.py` — pacing, label stripping, backpressure
+- [x] 2. `stream/replayer.py` — pacing, label stripping, backpressure ✅ 2026-09-21 (`tests/test_replayer.py`, 45)
 - [ ] 3. `stream/sink.py` + `storage/parquet_io.py` + `storage/duck.py` — atomic writes, watermark, dedup view
 - [ ] 4. `stream/scorer.py` — micro-batch loop, pending drain/reclaim, DLQ, ack-after-flush, HOLD, metrics, SIGTERM, `crash_after` hook
 - [ ] 5. `stream/backfill.py` (§9.5)
@@ -340,6 +348,10 @@ again in either file.
 | 2026-09-21 | A scored event costs **two** Redis round trips, not the one §5.4 sketches | §5.4 describes a load pipeline holding `GET feat:{txn}`, `GET state:acct:{id}` and the five `ZCOUNT`s — but the `StateStore` protocol in the same section hands `committed()` only a `txn_id`, so the entity keys are not knowable there. Implemented as the protocol specifies: one `GET`, then one pipeline of six. Collapsing them means passing the whole event to `committed()`, a protocol change not worth making before Phase 9 measures whether it matters | §5.4 |
 | 2026-09-21 | `configs/features.yaml` gained a `redis:` block **without** bumping `FEATURE_SPEC_VERSION` | Invariant 2 requires a bump when a feature *definition* changes. These three knobs (record TTL, entity retention, trim cadence) govern storage housekeeping in the online backend and cannot alter any computed value — retention equals the longest window, so trimming only removes what no window can reach. `FEATURE_SPEC_VERSION` stays `fs1`, and `models/v1` still loads with its compatibility checks passing | §3.6, §5.3 |
 | 2026-09-21 | Commit rejects a non-JSON `extra` rather than coercing it | `extra` carries `graph_snapshot_ts`. A datetime silently stringified on write would come back as a different type on redelivery, and the §9.6 re-score check compares to 1e-9. `json.dumps` raising is the desired behaviour; a test asserts nothing is written when it does | §5.4, §9.6 |
+| 2026-09-21 | The replayer reads the test window **without** going through the guarded split loader | `configs/splits.yaml` designates the test split as "also the window replayed live through Redis (PLAN §9.1)", so streaming it is sanctioned. The guard in `modeling/splits.py` protects *labelled evaluation*, not raw events, so the replayer takes only the window boundaries from `splits.windows()` — which reads YAML and no data — and filters `events.parquet` itself. It never opens `labels.parquet`, never appends to `test_runs.log` and never touches `metrics.test`. A test monkeypatches `splits.load` to raise, proving the path is not taken | §7.11, §9.1 |
+| 2026-09-21 | Stream order is `(event_time, txn_id)`, not `event_time` alone | The replay window has **5,260 tied timestamps**. §9.1 only says "asserts that events are sorted", which leaves ties undefined; the simulator assigns `txn_id` after sorting by time, so this pair is a total order that reproduces the offline replay exactly. Without it the §9.6 re-score check would compare two legitimately different orderings and fail for no reason | §4.2, §9.1, §9.6 |
+| 2026-09-21 | Redis integration tests are auto-marked from the `redis_client` fixture | `make test` deselects `-m redis`, and the first test that forgot the marker would fail in CI with a bare connection error. `pytest_collection_modifyitems` now derives the marker from fixture use, so it cannot be forgotten | §13 |
+| 2026-09-21 | `TransactionEvent.from_message` lives in `schemas.py`, shared by producer and consumer | Redis returns every field as a string. If the scorer cast them its own way, a disagreement about `amount` or `event_time` would not raise — it would quietly produce different features online than offline. One shared cast next to `EVENT_FIELDS` removes the possibility | §3.5 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---

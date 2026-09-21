@@ -16,6 +16,19 @@ _MANAGED_VARS = ("REDIS_URL", "DATA_DIR", "MODEL_DIR", "MODEL_VERSION")
 _TEST_DB = 15
 
 
+def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
+    """Anything using `redis_client` is a Redis integration test, marked or not.
+
+    `make test` deselects `-m redis` so the unit suite runs without a server. Relying on
+    each test to remember the marker means the first one that forgets fails in CI with a
+    connection error rather than a useful message, so the marker is derived from the
+    fixture instead of repeated by hand.
+    """
+    for item in items:
+        if "redis_client" in getattr(item, "fixturenames", ()):
+            item.add_marker(pytest.mark.redis)
+
+
 @pytest.fixture
 def clean_env(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     """Remove every configuration variable so a test sees the repository defaults."""

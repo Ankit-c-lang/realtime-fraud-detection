@@ -61,3 +61,31 @@ class TransactionEvent:
     @classmethod
     def from_mapping(cls, row: dict[str, Any]) -> TransactionEvent:
         return cls(**{field: row[field] for field in EVENT_FIELDS})
+
+    @classmethod
+    def from_message(cls, fields: dict[str, Any]) -> TransactionEvent:
+        """Rebuild an event from a Redis Stream message (PLAN §3.5).
+
+        Redis stores every field as a string, so somebody has to cast them back. Doing it
+        here rather than in the scorer means the producer and the consumer cannot disagree
+        about what ``amount`` or ``event_time`` mean — a mismatch that would not raise,
+        it would just quietly produce different features online than offline.
+
+        ``ingest_ts`` and ``schema_version`` are transport metadata, not part of the
+        event, so they are ignored here and read separately by whoever needs them.
+        """
+        raw = {field: fields[field] for field in EVENT_FIELDS}
+        event_time = raw["event_time"]
+        return cls(
+            **{
+                **raw,
+                "event_time": (
+                    event_time
+                    if isinstance(event_time, datetime)
+                    else datetime.fromisoformat(str(event_time))
+                ),
+                "amount": float(raw["amount"]),
+                "lat": float(raw["lat"]),
+                "lon": float(raw["lon"]),
+            }
+        )
