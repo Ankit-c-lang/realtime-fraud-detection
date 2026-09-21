@@ -102,6 +102,11 @@ smoke:  ## End-to-end check: replay 2,000 events and assert the output
 bench:  ## Throughput and latency benchmark (PLAN §9.6)
 	$(RUN) python scripts/benchmark_stream.py
 
+bench-docker:  ## Sample container memory during a Compose replay (PLAN §12.2)
+	# `make bench` runs the scorer in-process, so docker stats would show idle
+	# containers. This measures the real services instead.
+	@bash scripts/capture_container_memory.sh
+
 rescore-check:  ## Re-score live output offline and compare (PLAN §9.6)
 	$(RUN) python scripts/rescore_check.py
 

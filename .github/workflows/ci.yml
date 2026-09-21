@@ -1,8 +1,10 @@
-# Phase 0 ships the lint-unit job only. The redis-integration and image-build jobs
-# from PLAN §14 arrive in Phase 9, once there is Redis code and a Dockerfile.
+# Three jobs (PLAN §14): lint + unit tests, the Redis integration suite, and an image
+# build. They are separate rather than sequential steps so a failure names itself — a
+# red `image-build` and a red `redis-integration` mean very different things.
 #
-# CI never needs data/ or models/: it does not train, and it does not run a replay.
-# Those depend on the hardware and are run locally with `make all` and `make bench`.
+# CI never needs data/ or models/: it does not train and it does not replay. Those
+# depend on the hardware and are run locally with `make all`, `make bench` and
+# `make rescore-check`.
 name: ci
 
 on: [push, pull_request]
@@ -30,3 +32,61 @@ jobs:
 
       - name: Unit tests
         run: make test
+
+  redis-integration:
+    runs-on: ubuntu-latest
+    services:
+      redis:
+        # The exact tag docker-compose.yml pins, so CI exercises the Redis the stack
+        # runs. `lag` in XINFO GROUPS needs >= 7.0, and the scorer's backpressure
+        # depends on it.
+        image: redis:8.10.1-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10.1.0
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --frozen --all-groups
+
+      # make test-redis points REDIS_URL at DB 15, which the conftest fixture refuses to
+      # run against anything else — the guard that stops a test flushing live state.
+      - name: Redis integration tests
+        run: make test-redis
+
+  image-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Build only. Running the stack here would need data/ and models/, which are
+      # gitignored and hardware-dependent; `make smoke` covers that locally.
+      - name: Build the service image
+        run: docker build -t fraud-app:ci .
+
+      # A built image that cannot import the package is not a working image, and the
+      # Dockerfile's uv sync could succeed while the venv PATH is wrong.
+      - name: Check the image can import the package
+        run: |
+          docker run --rm fraud-app:ci python -c "
+          import fraud, fraud.api.main, fraud.stream.scorer, fraud.graph.refresh_live
+          print('image imports OK')"
+
+      # The serving image must not carry the dev, sim or analysis groups (PLAN §12.1).
+      - name: Check dev dependencies are absent
+        run: |
+          docker run --rm fraud-app:ci python -c "
+          import importlib.util
+          leaked = [n for n in ('pytest', 'faker', 'shap', 'matplotlib')
+                    if importlib.util.find_spec(n) is not None]
+          assert not leaked, f'dev dependencies leaked into the image: {leaked}'
+          print('no dev dependencies in the image')"

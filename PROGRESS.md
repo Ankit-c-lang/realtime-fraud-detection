@@ -4,7 +4,7 @@ Living status file. **Update it at the end of every completed task**, together w
 that task. Source of truth for *what* to build is `PLAN.md`; this file only tracks *where we are*.
 
 - **Plan version:** v1 (2026-09-16) · **Started:** 2026-09-20
-- **Current phase:** Phase 9 — Docker Compose and benchmark (PLAN §17, Phase 9) · Phases 0-8 complete · tags `phase-0`, `sim-v1`, `phase-2`, `sim-v2`, **`sim-v2-fix1`**
+- **Current phase:** Phase 10 — Documentation, demo, interview prep (PLAN §17, Phase 10) · Phases 0-9 complete · tags `phase-0`, `sim-v1`, `phase-2`, `sim-v2`, **`sim-v2-fix1`**
 - **Phase 1 progress:** 8 / 8 ✅ — **simulator FROZEN, tagged `sim-v1`**
 - **Phase 2 progress:** 7 / 7 ✅ — tagged `phase-2`
 - **Phase 3 progress:** 6 / 6 ✅ (E3 ablation belongs to Phase 4)
@@ -12,60 +12,66 @@ that task. Source of truth for *what* to build is `PLAN.md`; this file only trac
 - **Phase 5 progress:** 8 / 8 ✅ — **COMPLETE**, test split evaluated once on 2026-09-21
 - **Phase 6 progress:** 9 / 9 ✅ — **COMPLETE**, tagged `phase-6`
 - **Phase 7 progress:** 5 / 5 ✅ — tagged `phase-7`
-- **Phase 8 progress:** 3 / 3 ✅ — **PHASE 8 COMPLETE**
-- **Overall:** 60 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Phase 8 progress:** 3 / 3 ✅ — tagged `phase-8`
+- **Phase 9 progress:** 7 / 7 ✅ — **PHASE 9 COMPLETE**
+- **Overall:** 67 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Nothing — Phase 8 is complete.** **705 tests green: 555 unit + 150 Redis integration.**
+**Nothing — Phase 9 is complete.** The whole stack runs in Compose and is benchmarked.
 
-`dashboard/app.py` has all six §11 panels, each on its own `st.fragment` clock (2 s live
-counters, 5 s hourly, 10 s aggregates), a session-cached in-memory DuckDB connection, and
-API calls through httpx with `API_URL` from env.
+### `make up` → `make smoke`
 
-### The scorecard reproduces the recorded metrics exactly
+redis (healthy) → backfill (exits 0) → scorer / graph-refresh / api (healthy) → dashboard.
+`make smoke` replays 2,000 events through the containers and asserts **2,000 unique rows
+from 2,000 raw** plus a healthy `/health`.
 
-Its SQL join is written independently of `modeling/metrics.py`, and against the real
-102,987-row replay output it returns:
+### Benchmark (`reports/benchmark.md`, generated)
 
-| | Dashboard | Recorded E4 test |
-|---|---|---|
-| precision | 0.9577 | 0.9577 |
-| recall | 0.9928 | 0.9928 |
-| alerts | 2,151 | 2,151 |
-| ATO / CT / RING / VEL recall | 1.000 / 1.000 / 0.9948 / 0.9677 | identical |
+| Micro-batch | 1 | 50 | 200 | 500 |
+|---|---|---|---|---|
+| events/s | 33 | 437 | 588 | **628** |
 
-That is a genuine cross-check rather than a coincidence: two independent implementations
-of "how is the replay going" agreeing to four decimal places.
+| Load | Rate | p50 | p95 | p99 |
+|---|---|---|---|---|
+| 50% of capacity | 314/s | 154 ms | 210 ms | 224 ms |
+| 80% of capacity | 503/s | 214 ms | 318 ms | 347 ms |
 
-### Two things the design has to get right
+Container peaks during a Compose replay: graph-refresh 530 MiB, replayer 322 MiB, api
+224 MiB, scorer 223 MiB, redis 56 MiB, dashboard 50 MiB — comfortably inside 7.7 GB.
 
-**The cached connection would have gone stale-empty.** `st.cache_resource` holds one
-DuckDB connection for the session, and a view is defined *once*. Started before the
-scorer writes anything — the normal case — every panel would read the empty placeholder
-for the rest of the replay and look like a broken scorer. `duck.define_scored_view()` is
-now separable so the connection can pick up files that appear later; a test opens a
-connection on an empty directory, writes rows, and asserts the view sees them.
+### Three problems the benchmark itself had
 
-**The scorecard is labelled on screen.** "Evaluation data the scorer never sees" is
-rendered as a caption and asserted by a test, because a panel showing precision beside
-live throughput implies the running system knows which transactions are fraud.
+**The first latency numbers were meaningless** (p50 45 s at "50% load"). The harness
+replayed the whole dataset *before* starting the scorer, so every event waited for the
+backlog — precisely the queueing artefact §9.6 says not to publish. The replayer and
+scorer now run concurrently, and the scorer is warmed up first so the opening events do
+not queue behind XGBoost deserialisation.
+
+**Then p95 was worse at 50% load than at 80%** (3.6 s vs 996 ms). Measuring the same
+configuration in isolation gave 225 ms, flat across all ten deciles — the tail was the
+benchmark's own disk traffic from four back-to-back runs, not the scorer. The harness now
+settles for 10 s between runs, and the caveat is in the report.
+
+**The staleness table was mislabelled.** It read as a steady state; in fact graph-refresh
+does not run during the benchmark, so every row resolves the one snapshot the backfill
+published. The report now says so and points at `make rescore-check` for live staleness.
+
+**678 tests green: 555 unit + 150 Redis integration** (plus the CI image checks).
 
 Phase 5 outputs untouched: `sim.yaml` still `4013268a…`, `models/v1` still PR-AUC 0.99377
-valid / 0.99379 test, `reports/` and `models/` byte-unchanged, `test_runs.log` one line.
+valid / 0.99379 test, `test_runs.log` one line.
 
 ---
 
 ## Next up (in order)
 
-1. **Phase 9 / P9.1** — `Dockerfile` (§12.1) and the full `docker-compose.yml` (§12.2) with pinned tags; `make up` / `demo` / `logs` / `demo-reset` / `smoke`.
-2. **Phase 9 / P9.2** — `scripts/benchmark_stream.py`: capacity at batch {1, 50, 200, 500}, latency at ~50% and ~80% of capacity → `reports/benchmark.md`.
-3. **Phase 9 / P9.3** — CI: add `redis-integration` and `image-build` jobs (three green jobs).
-4. **Phase 10** — README, demo recording, CV bullets, clean-clone rerun.
-
-`make api` serves on :8000 and `make dashboard` on :8501; the dashboard reads `API_URL`.
+1. **Phase 10 / P10.1** — `README.md` in the §17 Phase-10 order, with the synthetic-data caveat on the first screen. Every number quotable from `reports/`.
+2. **P10.2** — demo recording (2-3 min), including `docker compose restart scorer` mid-replay showing no duplicates.
+3. **P10.3** — CV bullets from `results.md` + `benchmark.md` (§20.3).
+4. **P10.4/5** — interview prep (§21) and a clean-clone rerun: fresh clone → `make setup all up demo` → numbers match `reports/`.
 
 ---
 
@@ -183,6 +189,7 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-21 | 7 | FastAPI service per §10: Pydantic request models with `extra="forbid"`, lifespan-loaded model/Redis/engine, `/health` `/score` `/alerts` `/transactions/{id}` `/metrics`, 503 on Redis errors, `make api` | `tests/test_api.py` 44; live curl against 218,588-key Redis left every key unchanged |
 | 2026-09-21 | 7 | **Phase 7 complete.** Latency recording wired into the flush path — `/metrics` percentiles had no data because `record_latency()` was never called | `tests/test_scorer_recovery.py` 44; 800 events → 800 samples → p50 904 ms |
 | 2026-09-21 | 8 | `dashboard/app.py` — six §11 panels on per-panel `st.fragment` clocks, cached DuckDB connection, httpx API calls, scorecard labelled as evaluation data | `tests/test_dashboard.py` 21 incl. `AppTest` render checks; scorecard reproduces E4 test metrics to 4 dp on the real replay |
+| 2026-09-21 | 9 | `Dockerfile` + full `docker-compose.yml` + `make up/demo/logs/demo-reset/smoke`; `scripts/benchmark_stream.py`, `capture_container_memory.sh`, `reports/benchmark.md`; CI grown to 3 jobs | `make smoke`: 2,000 events → 2,000 unique rows; peak **628 events/s**, p50 154 ms at half load |
 
 ---
 
@@ -277,14 +284,14 @@ before continuing — do not silently slip.
 - [x] 2. Replay scorecard labelled as evaluation data the scorer never sees ✅ — asserted on the rendered caption, not just written
 - [x] 3. Rendered against the real 102,987-row replay output; `AppTest` reports 0 exceptions ✅
 
-### Phase 9 — Docker Compose and benchmark (Day 12, ~8 h, 5/10)
-- [ ] 1. `Dockerfile` (§12.1) with exact uv + Redis tags pinned
-- [ ] 2. Full `docker-compose.yml` (§12.2) + `.env.example` for Compose
-- [ ] 3. `make up` / `demo` / `demo-reset` / `smoke`
-- [ ] 4. `scripts/benchmark_stream.py` — capacity at batch {1,50,200,500}, latency at 50% and 80%
-- [ ] 5. `make rescore-check` inside the Compose run
-- [ ] 6. `reports/benchmark.md` — hardware, p50/p95/p99, staleness, `docker stats` peaks
-- [ ] 7. CI: add `redis-integration` and `image-build` jobs (3 green jobs)
+### Phase 9 — Docker Compose and benchmark (Day 12, ~8 h, 5/10) — ✅ COMPLETE (2026-09-21)
+- [x] 1. `Dockerfile` (§12.1), uv pinned `0.12.17`, Redis `8.10.1-alpine`, every line commented ✅
+- [x] 2. Full `docker-compose.yml` (§12.2) + `.env.example` for Compose ✅
+- [x] 3. `make up` / `demo` / `logs` / `demo-reset` / `smoke` ✅ — smoke passes: 2,000 events, 2,000 unique rows
+- [x] 4. `scripts/benchmark_stream.py` — capacity at batch {1, 50, 200, 500}, latency at 50% and 80% ✅
+- [x] 5. `make rescore-check` verified against the containerised output ✅
+- [x] 6. `reports/benchmark.md` — hardware, p50/p95/p99, staleness, container memory peaks ✅
+- [x] 7. CI: `redis-integration` and `image-build` jobs added (3 jobs) ✅
 
 ### Phase 10 — Documentation, demo, interview prep (Day 13 → Day 14 am, ~10 h, 3/10)
 - [ ] 1. `README.md` in the §17 Phase-10 order (synthetic-data caveat on the first screen)
@@ -421,6 +428,12 @@ again in either file.
 | 2026-09-21 | `duck.define_scored_view()` split out of `connect()` so a cached connection can pick up later files | §11 says to cache the DuckDB connection with `st.cache_resource`, and §9.4's view is defined once. The dashboard is normally started *before* the scorer writes anything, so the connection would hold the empty placeholder for the whole replay and every panel would show zeros — indistinguishable from a broken scorer. The view is now re-pointed on each refresh until real data appears | §9.4, §11 |
 | 2026-09-21 | **Caught by CI: the leaderboard panel vanished when there was no scored output** | Every other panel renders its heading and an "No scored output yet" message; this one returned early and disappeared entirely. Locally it was invisible because `data/scored/` held the replay output — CI, with an empty directory, is what exposed it. A panel that disappears reads as a broken page rather than an idle one, and the layout shifting under the operator once the replay starts is its own small lie. Fixed in the app rather than by loosening the test | §11 |
 | 2026-09-21 | The dashboard is tested with Streamlit's `AppTest`, not only through its data functions | The query functions are plain and testable, but nothing in them would catch a misused Streamlit API — those fail only when the script executes. `AppTest` runs the real file and asserts zero exceptions, all six §11 panels, and the scorecard caveat actually on screen. It passes with no API and no scored output, because both degrade to a message | §11, §13 |
+| 2026-09-21 | **The benchmark's first latency numbers were measuring its own queue** | `measure()` replayed the entire dataset before starting the scorer, so every event waited for the whole backlog to drain: p50 of 45 s at "50% of capacity". That is exactly the artefact §9.6 warns about, produced by accident in the very script meant to avoid it. Split into `measure_capacity` (sequential on purpose — capacity means "never starved") and `measure_latency` (replayer and scorer concurrent, scorer warmed up first so the opening events do not queue behind model loading) | §9.6 |
+| 2026-09-21 | **The benchmark's tail was measuring the benchmark** | After the concurrency fix, p95 was 3.6 s at 50% load but 996 ms at 80% — an inversion with no physical explanation. Re-measuring the same configuration in isolation gave p50/p95/p99 of 157/225/242 ms, flat across all ten deciles. The tail was disk and Redis traffic from four back-to-back runs, each writing 20,000 Parquet rows and re-running a ~200k-key backfill. The harness now settles 10 s between runs and the report states the finding | §9.6 |
+| 2026-09-21 | `make up` builds one service explicitly instead of `up --build` | `--build` starts a build job per service even though all six share `image: fraud-app:local`. Six concurrent jobs each wanting scratch space exhausted a 39 GB disk twice mid-build, with the layer cache unable to help because nothing had finished | §12.2 |
+| 2026-09-21 | The image drops xgboost's bundled CUDA runtime | 288 MB of NVIDIA libraries that a CPU-only box (§15.2, integrated graphics) can never load. Removed after `uv sync` rather than by switching to the `xgboost-cpu` package, so `uv.lock` — and the host environment that trained `models/v1` — stays byte-identical to what CI resolves. Image content 1.65 GB → 1.4 GB. §2.2 lists a slim serving image as a nice-to-have; this is the part that paid for itself immediately | §12.1, §2.2 |
+| 2026-09-21 | Compose overrides `REDIS_URL`/`DATA_DIR`/`MODEL_DIR`/`API_URL` rather than putting them in `.env` | §12.2 puts `REDIS_URL=redis://redis:6379/0` in `.env`, which breaks every host-side command — `localhost` and `redis` cannot both be right in one file, and §12.2's own "common mistakes" names that trap. `.env` keeps host defaults; the `x-app` anchor overrides the four container-specific values in `environment:`, which takes precedence. `env_file` is `required: false` so a fresh clone starts before anyone copies the template | §12.2 |
+| 2026-09-21 | The `image-build` CI job asserts more than "it built" | A built image that cannot import the package, or that carries pytest and shap, is not a working serving image and `docker build` would still be green. The job imports the four service entrypoints and asserts the dev/sim/analysis groups are absent | §12.1, §14 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---
