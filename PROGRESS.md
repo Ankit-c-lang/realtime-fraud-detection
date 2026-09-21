@@ -14,55 +14,50 @@ that task. Source of truth for *what* to build is `PLAN.md`; this file only trac
 - **Phase 7 progress:** 5 / 5 ✅ — tagged `phase-7`
 - **Phase 8 progress:** 3 / 3 ✅ — tagged `phase-8`
 - **Phase 9 progress:** 7 / 7 ✅ — tagged `phase-9`, 3 green CI jobs
-- **Phase 10 progress:** 4 / 5
+- **Phase 10 progress:** 4.5 / 5 — shot list written and rehearsed; only the recording itself remains
 - **Overall:** 71 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Phase 10 · Tasks 3 and 4 done — `docs/cv_bullets.md` and `docs/interview_notes.md`.**
+**`docs/demo_script.md` written, and every shot rehearsed on this machine.**
 
-### CV bullets, filled from measured values
+The recording itself is the user's to make; the timings below are measured, not estimated.
 
-99.3% recall, 0.975 F1, 0.994 PR-AUC on test; 628 events/s at 318 ms p95. Three
-deliberate departures from the §20.3 template, each because the template's wording would
-have been false here:
+| Check | Rehearsed result |
+|---|---|
+| Stack healthy after `make up` | ~45 s |
+| `docker compose restart scorer` mid-replay | **0.73 s** |
+| Rows after that restart | **102,987 unique from 102,987 raw — 0 duplicates** |
+| `make rescore-check` afterwards | `0.00e+00` on all three comparisons |
 
-- **"500K+" → "494K".** The simulator makes 494,189 events. Rounding up by 5,811 is the
-  easiest thing in a CV to be caught on.
-- **The ring-lift clause is dropped**, as §20.3 instructs when the lift is small. E2 and
-  E3 both score **1.00** ring recall on test — the lift is exactly zero. It is replaced
-  with the leave-one-pattern-out result, which is a real measurement.
-- **"SHAP reason codes" → "native-contribution reason codes".** The serving path uses
-  XGBoost's `pred_contribs`; `shap` appears once, offline, for a figure. Claiming SHAP in
-  production is the kind of thing an interviewer who knows the library spots instantly.
+### A real problem the rehearsal exposed
 
-### Interview notes
+A fresh clone has **no `.env`**, so `CONSUMER_NAME` is unset and the scorer falls back to
+its container hostname (§9.2's documented fallback). That works, but the id changes
+whenever the container is *recreated* — and the previous consumer's pending messages are
+then orphaned until the 60 s-idle reclaim finds them, instead of being drained at startup.
+Recovery still happens, just up to ~90 s later than it should.
 
-All 21 §21 questions answered with this project's own numbers rather than theory, and
-every quoted figure cross-checked against `reports/` — including the ones that are
-narrative rather than tabular (`0 of 65,604` legitimate rows, carrier-NAT median 114
-accounts/IP, 5,260 tied timestamps, additivity 2.0e-05).
+`make up` now creates `.env` from `.env.example` when it is missing, so the consumer name
+is `scorer-1` and stable. Verified: `scorer scorer-1 ready: model v1`.
 
-Several answers deliberately lead with something that went wrong, because those are the
-ones worth telling: the first latency harness reporting a p50 of 45 s, the tail that
-turned out to be the benchmark's own disk traffic, and E2's 0.9995 that forced the
-sim-v2 revision.
-
-Not linked from the README — it is preparation, not documentation.
+The demo shot itself was never at risk — `docker compose restart` reuses the **same**
+container, so the hostname survives and the startup drain works. It would have bitten on
+`--force-recreate` or after a rebuild.
 
 ---
 
 ## Next up (in order)
 
-**One task left: P10.2, the demo recording — and it is the user's to make.**
+**One action left, and it is the user's: record the demo.**
 
-The stack is up and `data/scored/` holds the full 102,987-row window, so nothing needs
-regenerating. The shot list and exact commands are in the assistant's reply; the recording
-then needs linking from the README.
+`docs/demo_script.md` has the shot list, the exact commands, the rehearsed timings and the
+two things that go wrong if the recording is rushed. Afterwards, replace the placeholder
+link at the top of `README.md` and tick Phase 10 task 2 → **73/73**.
 
-After that: 73/73, and the NICE-TO-HAVE list in §2.2 is the only thing left.
+Then the §2.2 NICE-TO-HAVE list is all that remains.
 
 ---
 
@@ -184,6 +179,7 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-21 | 10 | `README.md` — §17 Phase-10 order, synthetic-data caveat first, every number traced to `reports/` | 2,134 words; automated check of 28 figures against `results.md`, `benchmark.md`, `E5.json`, `manifest.json`, `metadata.json` |
 | 2026-09-21 | 10 | **Clean-clone rerun**: fresh clone → `make setup all up demo` | 5/5 parquet files byte-identical (SHA-256), model metrics identical to full float precision, `metrics.test` null; full window re-replayed through Compose, `rescore-check` `0.00e+00` |
 | 2026-09-21 | 10 | `docs/cv_bullets.md` and `docs/interview_notes.md` — placeholders filled from measured values, all 21 §21 questions answered | every figure cross-checked against `reports/` by script; 3 template departures documented |
+| 2026-09-21 | 10 | `docs/demo_script.md` — shot list with rehearsed timings; `make up` now creates `.env` so the consumer name is stable | restart rehearsed at 0.73 s with 0 duplicates from 102,987 events; `rescore-check` `0.00e+00` |
 
 ---
 
@@ -430,6 +426,7 @@ again in either file.
 | 2026-09-21 | The `image-build` CI job asserts more than "it built" | A built image that cannot import the package, or that carries pytest and shap, is not a working serving image and `docker build` would still be green. The job imports the four service entrypoints and asserts the dev/sim/analysis groups are absent | §12.1, §14 |
 | 2026-09-21 | README figures are verified against `reports/` by a script, not by eye | §0.4 requires every published number to come from a file. Checking by hand is how a stale figure survives: the draft quoted container memory rounded to `530 MiB` where the report says `529.5MiB`, and quoted HOLD-tier precision as `0.961` — correct three phases ago, but the margin and HINCRBY fixes moved it to `0.960`. Both were caught by comparing the README against the artifacts programmatically | §0.4 |
 | 2026-09-21 | Three departures from the §20.3 CV template, each to avoid a false claim | "500K+" overstates 494,189 by 5,811; the ring-lift clause is dropped because E2 and E3 both score 1.00 ring recall on test so the lift is **zero** (§20.3 itself says drop it when small); and "SHAP reason codes" is wrong because the serving path uses XGBoost's native `pred_contribs` — `shap` is used once, offline, for a figure | §20.3, §3.8 |
+| 2026-09-21 | **Found while rehearsing the demo: a fresh clone has no `.env`, so the scorer's consumer name is a container id** | §9.2's `CONSUMER_NAME or hostname` fallback works, but a container id changes whenever the container is *recreated*, and the old consumer's pending messages are then orphaned until the 60 s-idle reclaim finds them rather than being drained at startup — recovery up to ~90 s later than it should be. `make up` now creates `.env` from `.env.example` when missing, giving a stable `scorer-1`. The demo's `docker compose restart` was never affected: it reuses the same container, so the hostname survives | §9.2, §12.2 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---

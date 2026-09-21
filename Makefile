@@ -77,6 +77,11 @@ all: data features graph train  ## The whole offline pipeline
 # --- live stack -------------------------------------------------------------
 
 up:  ## Build and start the stack (PLAN §12.2)
+	# A fresh clone has no .env, so CONSUMER_NAME is unset and the scorer falls back to
+	# its container hostname (PLAN §9.2). That works, but the id changes whenever the
+	# container is recreated, and the previous consumer's pending messages are then
+	# orphaned until the 60s-idle reclaim finds them instead of being drained at startup.
+	@test -f .env || { cp .env.example .env; echo "created .env from .env.example"; }
 	# Build ONE service, not `up --build`. Every service shares `image: fraud-app:local`,
 	# but `--build` still starts a build job per service, and six concurrent jobs each
 	# needing scratch space fill a 39 GB disk before the layer cache can help.

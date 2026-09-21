@@ -1,5 +1,8 @@
 # Realtime fraud detection
 
+> **[▶ Demo recording](docs/demo_script.md)** — *link to be added after recording; the
+> shot list and rehearsed timings are in `docs/demo_script.md`.*
+
 Near-real-time monitoring of card transactions **after** authorisation: a Redis Streams
 pipeline scores every payment against a behavioural model, a graph model and an anomaly
 detector, and routes it to `ALLOW`, `REVIEW` or `HOLD` within an analyst capacity budget.
