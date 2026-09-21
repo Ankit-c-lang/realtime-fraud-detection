@@ -35,21 +35,23 @@ jobs:
 
   redis-integration:
     runs-on: ubuntu-latest
-    services:
-      redis:
-        # The exact tag docker-compose.yml pins, so CI exercises the Redis the stack
-        # runs. `lag` in XINFO GROUPS needs >= 7.0, and the scorer's backpressure
-        # depends on it.
-        image: redis:8.10.1-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 10
     steps:
       - uses: actions/checkout@v7
+
+      # Started as a step, not a `services:` block. A service container cannot override
+      # the image's command, so it would run with append-only persistence OFF — and one
+      # of these tests asserts it is on, because docker-compose.yml turns it on and
+      # state surviving a restart mid-demo depends on it (PLAN §12.2). Running it the
+      # same way Compose does is the point: CI exercises the deployed configuration.
+      - name: Start Redis with the Compose configuration
+        run: |
+          docker run -d --name ci-redis -p 6379:6379 redis:8.10.1-alpine \
+            redis-server --appendonly yes --appendfsync everysec
+          for _ in $(seq 1 30); do
+            docker exec ci-redis redis-cli ping >/dev/null 2>&1 && break
+            sleep 1
+          done
+          docker exec ci-redis redis-cli ping
 
       - uses: astral-sh/setup-uv@v10.1.0
         with:

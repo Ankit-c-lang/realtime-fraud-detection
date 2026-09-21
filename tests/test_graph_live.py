@@ -23,7 +23,7 @@ import pandas as pd
 import pytest
 from redis import Redis
 
-from fraud.config import load_yaml
+from fraud.config import Settings, load_yaml
 from fraud.features.spec import FEATURE_SPEC_VERSION
 from fraud.features.store_redis import STATE_VERSION_KEY, RedisStore
 from fraud.graph import refresh_live
@@ -281,8 +281,17 @@ def test_history_stops_at_the_replay_boundary(tmp_path: Path) -> None:
     assert history["event_time"].max() < BOUNDARY
 
 
-def test_history_never_reaches_into_the_replay_window(tmp_path: Path) -> None:
-    """Asserted on the real simulator file, not a fixture."""
+@pytest.mark.skipif(
+    not (Settings.from_env().raw_dir / "events.parquet").is_file(),
+    reason="needs generated data (`make data`); CI does not build the dataset",
+)
+def test_history_never_reaches_into_the_replay_window() -> None:
+    """Asserted on the real simulator file, not a fixture.
+
+    Skipped rather than faked when the dataset is absent: the whole value of this test
+    is that it runs against the actual events.parquet, and a fixture version would
+    re-test the filter already covered above.
+    """
     history = refresh_live.load_history()
     assert history["event_time"].max() < refresh_live.test_start()
 
@@ -371,8 +380,15 @@ def test_the_loop_stops_when_nothing_is_due(redis_client: Redis) -> None:
     assert refresh_live.run(redis_client, stop_when_idle=True) == []
 
 
+@pytest.mark.skipif(
+    not (Settings.from_env().raw_dir / "labels.parquet").is_file(),
+    reason="needs generated data (`make data`); CI does not build the dataset",
+)
 def test_the_loop_publishes_a_due_snapshot(redis_client: Redis, tmp_path: Path) -> None:
-    """End to end on a tiny graph: due -> computed -> written -> published."""
+    """End to end on a tiny graph: due -> computed -> written -> published.
+
+    Reads the real labels.parquet for PPR seeds, so it needs `make data`.
+    """
     events = tmp_path / "events.parquet"
     start = refresh_live.test_start()
     # Two accounts sharing one device, which is an edge the projection will keep.
