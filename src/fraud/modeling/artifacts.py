@@ -293,6 +293,9 @@ def build(version: str, *, n_jobs: int = -1) -> tuple[Path, dict[str, Any]]:
         thresholds.review,
         amounts=valid["amount"].to_numpy() if "amount" in valid.columns else None,
         fraud_type=valid["fraud_type"].to_numpy(),
+        # The policy tier, not a fresh search: the metadata has to describe the model
+        # that ships, and this one disables HOLD (§7.7).
+        hold=thresholds.hold,
     )
 
     metadata = build_metadata(

@@ -210,9 +210,16 @@ def _experiment(experiment_id: str, **metrics: Any) -> dict[str, Any]:
         "f1": 0.9,
         "false_positive_rate": 0.001,
         "alert_rate": 0.013,
+        "alerts": 909,
         "value_detection_rate": 0.9,
         "recall_by_pattern": {"VELOCITY": 0.9, "ATO": 1.0, "CARD_TESTING": 1.0, "RING": 1.0},
-        "hold": {"threshold": None, "precision": None, "alerts": 0},
+        "hold": {
+            "enabled": False,
+            "threshold": None,
+            "precision": None,
+            "alerts": 0,
+            "source": "policy",
+        },
     }
     base.update(metrics)
     return {
@@ -265,7 +272,8 @@ def test_results_says_the_test_split_is_unread(rendered: str) -> None:
 
 
 def test_results_explains_the_disabled_hold_tier(rendered: str) -> None:
-    assert "**HOLD is disabled.**" in rendered
+    assert "HOLD is disabled in this model version" in rendered
+    assert "Every flagged transaction goes to REVIEW" in rendered
 
 
 def test_results_reports_the_flat_weight_curve(rendered: str) -> None:

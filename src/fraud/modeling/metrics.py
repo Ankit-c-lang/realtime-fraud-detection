@@ -13,7 +13,7 @@ traffic is not a threshold anyone can staff.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Final
 
 import numpy as np
 from sklearn.metrics import average_precision_score, roc_auc_score
@@ -21,6 +21,13 @@ from sklearn.metrics import average_precision_score, roc_auc_score
 from fraud.config import load_yaml
 
 NO_FRAUD = "NONE"
+
+
+class _Unset:
+    """Marker for "no policy supplied, run the exploratory search"."""
+
+
+UNSET: Final[Any] = _Unset()
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,6 +60,15 @@ class Evaluation:
     hold_threshold: float | None = None
     hold_precision: float | None = None
     hold_alerts: int = 0
+    # Where the HOLD block came from. "search" is the exploratory question "could this
+    # score support a HOLD tier at all"; "policy" is the tier a shipped artifact actually
+    # applies. They differ, and a reader has to be able to tell which one they are
+    # looking at — see the note on `evaluate_at`.
+    hold_source: str = "search"
+
+    @property
+    def hold_enabled(self) -> bool:
+        return self.hold_threshold is not None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -68,9 +84,11 @@ class Evaluation:
             "value_detection_rate": self.value_detection_rate,
             "recall_by_pattern": self.recall_by_pattern,
             "hold": {
+                "enabled": self.hold_enabled,
                 "threshold": self.hold_threshold,
                 "precision": self.hold_precision,
                 "alerts": self.hold_alerts,
+                "source": self.hold_source,
             },
         }
 
@@ -172,10 +190,13 @@ def evaluate(
     amounts: np.ndarray | None = None,
     fraud_type: np.ndarray | None = None,
     budget: float | None = None,
+    hold: float | None | _Unset = UNSET,
 ) -> Evaluation:
     """The full §7.8 picture, at the best threshold inside the alert budget."""
     point = operating_point(y_true, scores, budget)
-    return evaluate_at(y_true, scores, point.threshold, amounts=amounts, fraud_type=fraud_type)
+    return evaluate_at(
+        y_true, scores, point.threshold, amounts=amounts, fraud_type=fraud_type, hold=hold
+    )
 
 
 def evaluate_at(
@@ -185,11 +206,19 @@ def evaluate_at(
     *,
     amounts: np.ndarray | None = None,
     fraud_type: np.ndarray | None = None,
+    hold: float | None | _Unset = UNSET,
 ) -> Evaluation:
     """The same picture at a threshold someone else chose.
 
     The rules baseline needs this: rules fire where they fire, and forcing them through
     a budget-constrained search would flatter them by hiding how much they over-alert.
+
+    ``hold`` decides what the HOLD block means. Left unset, this searches for the best
+    HOLD threshold the score could support, which is the right question for a candidate
+    model nobody is shipping. Passed explicitly — including as ``None`` — it reports the
+    tier the artifact's decision policy actually applies. A shipped model must use the
+    second form: reporting a searched HOLD threshold beside a policy that disabled the
+    tier tells a reader the system freezes cards when it does not (§7.7, §8).
     """
     y_true = np.asarray(y_true)
     scores = np.asarray(scores, dtype=float)
@@ -228,7 +257,19 @@ def evaluate_at(
             if rows.any():
                 by_pattern[str(pattern)] = float(flagged[rows].mean())
 
-    hold_t, hold_p, hold_n = hold_threshold(y_true, scores)
+    if isinstance(hold, _Unset):
+        hold_t, hold_p, hold_n = hold_threshold(y_true, scores)
+        source = "search"
+    elif hold is None:
+        hold_t, hold_p, hold_n = None, None, 0
+        source = "policy"
+    else:
+        flagged_hold = scores >= hold
+        held = int(flagged_hold.sum())
+        hold_t = float(hold)
+        hold_p = float(y_true[flagged_hold].sum()) / held if held else None
+        hold_n = held
+        source = "policy"
 
     return Evaluation(
         pr_auc=pr_auc(y_true, scores),
@@ -245,4 +286,5 @@ def evaluate_at(
         hold_threshold=hold_t,
         hold_precision=hold_p,
         hold_alerts=hold_n,
+        hold_source=source,
     )

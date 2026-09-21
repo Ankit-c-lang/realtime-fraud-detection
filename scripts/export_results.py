@@ -90,13 +90,22 @@ def _hold_table(suffix: str = "") -> str:
     hold = payload["metrics"]["hold"]
     enabled = payload["details"].get("hold_enabled", hold["threshold"] is not None)
     if not enabled:
+        alerts = payload["metrics"]["alerts"]
         return (
-            "**HOLD is disabled.** Its threshold did not sit above the REVIEW threshold, "
-            "because precision inside the alert budget "
-            f"({payload['metrics']['precision']:.3f}) already clears the 0.95 bar. Every "
-            "alert would have become a HOLD, freezing every flagged customer and leaving "
-            "the analyst queue empty, so the tier is reported as not separating rather "
-            "than manufactured by moving the bar (PLAN §7.7).\n"
+            "**HOLD is disabled in this model version. Every flagged transaction goes to "
+            f"REVIEW** — {alerts:,} of them, at {payload['metrics']['precision']:.3f} "
+            "precision.\n\n"
+            "§7.7 picks the HOLD threshold as the lowest one reaching 0.95 precision, "
+            "which assumes precision at the budget threshold sits *below* that bar. Here "
+            "it does not, so the lowest qualifying threshold is the REVIEW threshold "
+            "itself and the two tiers coincide. Shipping that would freeze every flagged "
+            "customer and leave the analyst queue empty, so the tier is switched off and "
+            "reported as not separating, rather than manufactured by moving the bar.\n\n"
+            "The measured numbers are kept in `models/*/metadata.json` under "
+            '`thresholds.valid`, so "HOLD was possible but not distinct" stays '
+            'distinguishable from "nothing was precise enough". `ALLOW`/`REVIEW`/`HOLD` '
+            "remains the decision vocabulary; a later model version can enable the tier "
+            "without a schema change (PLAN §7.7).\n"
         )
     return (
         "| Threshold | Precision | Alerts |\n|---|---|---|\n"

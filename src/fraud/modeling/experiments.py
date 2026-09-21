@@ -297,6 +297,7 @@ def run_e4(valid: pd.DataFrame, *, model: Any = None, split: str = "valid") -> E
         bundle.thresholds.review,
         amounts=valid["amount"].to_numpy() if "amount" in valid.columns else None,
         fraud_type=valid["fraud_type"].to_numpy(),
+        hold=bundle.thresholds.hold,
     )
 
     return Experiment(

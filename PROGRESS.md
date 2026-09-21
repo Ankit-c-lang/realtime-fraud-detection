@@ -26,8 +26,10 @@ here (prompt P5.3). It will fill `metrics.test` in `models/v1/metadata.json`, wr
 Proof it has not been read: `reports/test_runs.log` does not exist and
 `models/v1/metadata.json` has `metrics.test = null`.
 
-⚠️ Still open for the user: **the HOLD tier is disabled** because it does not separate
-from REVIEW on this data (see the deviations table).
+✅ **Settled 2026-09-21: HOLD stays disabled for `v1`; every flagged transaction goes to
+REVIEW.** Accepted by the user. Verified consistent across the artifact, its metadata,
+the experiment files, the generated report and the serving path — see the deviations
+table.
 
 ---
 
@@ -318,6 +320,8 @@ again in either file.
 | 2026-09-20 | `evaluate_test.py` applies thresholds chosen on valid, and refits E2/E3 deterministically rather than reusing stored models | Re-deriving a threshold on test would tune the decision to the data judging it (L10). E2 and E3 have no saved artifact, so they are refit from `train` with the recorded seeded parameters — identical models, nothing fitted on test. E4 comes straight from `models/v1` | §7.11 |
 | 2026-09-20 | `EvaluationRun`, not `TestRun` | pytest collects any class named `Test*` and warns — the same trap that renamed `SplitLockedError`. Second occurrence, so it is worth stating as a convention | §13 |
 | 2026-09-20 | The global contribution figure is a real `shap` beeswarm, not the matplotlib fallback | §7.10 allows either. `shap` 0.52 and XGBoost 3.4 agreed, and the beeswarm shows direction and spread rather than magnitude alone — low `account_age_days` and high `dev_accts_30d` visibly push towards fraud. The fallback path is kept and still reachable | §7.10 |
+| 2026-09-21 | **ACCEPTED by the user: `v1` ships with HOLD disabled — all 909 flagged transactions go to REVIEW at 0.960 precision** | Confirmed on 2026-09-21 after the §7.7 tier collapse was reported. `ALLOW`/`REVIEW`/`HOLD` stays the decision vocabulary, so a later version can enable the tier with no schema change, and the scorer's `hold:acct:{id}` path (§7.7, Phase 6) is simply dormant in `v1`. Verified end to end: `thresholds.hold = null`, `hold_enabled = false`, `hold_degenerate = true`; `metrics.valid.hold` reports `enabled: false, source: "policy"`; `E4.json` matches byte for byte; `results.md` states the policy; scoring the valid split through `RiskModel` yields 65,440 ALLOW + 909 REVIEW and **zero HOLD** | §7.7 |
+| 2026-09-21 | The reported HOLD block now follows the policy instead of re-searching, and `metrics.hold` gained `enabled` and `source` | Verifying the accepted decision found a real inconsistency: `evaluate_at` ran its own `hold_threshold()` search regardless of the policy, so `models/v1/metadata.json` and `E4.json` advertised a live tier at threshold `0.5128` beside `thresholds.hold = null` — telling a reader the system freezes cards when it does not. `evaluate_at(..., hold=...)` now takes the policy; left unset it still searches, which is the right question for a candidate model nobody ships (`E2`/`E3`/`E3b` keep `source: "search"`). `models/v1` was rebuilt to regenerate the metadata only: PR-AUC `0.9937680386465483`, threshold `0.5128232795323753` and 909 alerts are all bit-identical, and round-trip verification measures 0. **No modelling choice changed** | §7.7, §8 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---

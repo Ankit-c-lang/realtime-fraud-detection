@@ -73,6 +73,13 @@ def _build(directory: Path, *, version: str = "v1", **overrides: Any) -> tuple[P
     risk = blend.blend(p_xgb, detector.percentile(valid), WEIGHT)
     thresholds = choose(valid["is_fraud"].to_numpy(), risk)
 
+    # A real Evaluation, carrying the policy tier, exactly as artifacts.build() does.
+    # A stubbed dict here would let the metadata-consistency test pass vacuously.
+    from fraud.modeling.metrics import evaluate_at
+
+    evaluation = evaluate_at(
+        valid["is_fraud"].to_numpy(), risk, thresholds.review, hold=thresholds.hold
+    )
     metadata = artifacts.build_metadata(
         version,
         xgb_params={"max_depth": 3},
@@ -80,7 +87,7 @@ def _build(directory: Path, *, version: str = "v1", **overrides: Any) -> tuple[P
         detector=detector,
         blend_weight=WEIGHT,
         thresholds=thresholds,
-        valid_metrics={"pr_auc": 1.0},
+        valid_metrics=evaluation.to_dict(),
     )
     metadata.update(overrides)
 
@@ -176,6 +183,70 @@ def test_hold_is_disabled_when_it_would_not_separate_from_review() -> None:
     # The measurement survives even though the tier is off, so metadata can tell the
     # two disabled cases apart.
     assert thresholds.hold_precision == pytest.approx(1.0)
+
+
+def test_reported_hold_block_follows_the_policy() -> None:
+    """A disabled tier must not be advertised as a live one.
+
+    ``evaluate_at`` runs its own HOLD search unless a policy is handed to it, so an
+    artifact could report ``thresholds.hold = null`` beside ``metrics.hold.threshold =
+    0.51`` — telling a reader the system freezes cards when it does not. The shipped
+    paths pass the policy; this pins that.
+    """
+    y = np.repeat([1, 0], [400, 3600])
+    risk = np.repeat([0.99, 0.01], [400, 3600])
+    thresholds = choose(y, risk)
+    assert thresholds.hold is None
+
+    from fraud.modeling.metrics import evaluate_at
+
+    searched = evaluate_at(y, risk, thresholds.review).to_dict()["hold"]
+    assert searched["enabled"] is True and searched["source"] == "search"
+
+    reported = evaluate_at(y, risk, thresholds.review, hold=thresholds.hold).to_dict()["hold"]
+    assert reported == {
+        "enabled": False,
+        "threshold": None,
+        "precision": None,
+        "alerts": 0,
+        "source": "policy",
+    }
+
+
+def test_an_enabled_hold_policy_is_measured_not_researched() -> None:
+    """When a policy tier exists, its numbers are the policy's, not a fresh search's."""
+    from fraud.modeling.metrics import evaluate_at
+
+    y = np.repeat([1, 0], [400, 3600])
+    risk = np.concatenate([np.linspace(0.6, 0.99, 400), np.linspace(0.0, 0.59, 3600)])
+
+    block = evaluate_at(y, risk, 0.6, hold=0.9).to_dict()["hold"]
+    assert block["enabled"] is True
+    assert block["threshold"] == 0.9
+    assert block["source"] == "policy"
+    assert block["alerts"] == int((risk >= 0.9).sum())
+
+
+def test_artifact_metadata_agrees_with_its_own_policy(built: tuple[Path, pd.DataFrame]) -> None:
+    """The whole point of the fix, asserted on a real saved folder."""
+    metadata = json.loads((built[0] / "v1" / "metadata.json").read_text())
+    policy = metadata["thresholds"]
+    reported = metadata["metrics"]["valid"]["hold"]
+
+    assert reported["source"] == "policy"
+    assert reported["enabled"] == policy["hold_enabled"]
+    assert reported["threshold"] == policy["hold"]
+
+
+def test_a_disabled_policy_never_reaches_a_decision(built: tuple[Path, pd.DataFrame]) -> None:
+    """End to end: if the artifact disables HOLD, scoring cannot emit one."""
+    directory, valid = built
+    model = RiskModel.load(model_dir=directory)
+    scored = model.score_batch(valid, explain=False)
+
+    if model.bundle.thresholds.hold is None:
+        assert HOLD not in set(scored.decision)
+    assert set(scored.decision) <= set(DECISIONS)
 
 
 def test_thresholds_serialise_the_disabled_reason() -> None:
