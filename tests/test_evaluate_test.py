@@ -190,6 +190,7 @@ def test_threshold_is_chosen_on_valid_not_on_test() -> None:
 def _export_results() -> Any:
     """Load scripts/export_results.py by path: scripts/ is not an installed package."""
     import importlib.util
+    import sys
 
     from fraud.config import PROJECT_ROOT
 
@@ -198,6 +199,9 @@ def _export_results() -> Any:
     )
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
+    # Register before executing: @dataclass resolves its own module through sys.modules,
+    # and a module that is not there fails with an opaque AttributeError.
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 

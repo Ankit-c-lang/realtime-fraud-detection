@@ -54,3 +54,13 @@ defaults:
   community_shared_devices: 0
   community_young_share: 0.0
   ppr_risk: 0.0
+
+# Live refresh (PLAN §6.5). Serving concerns only: these change how snapshots reach
+# Redis, never how one is computed, so the live and offline builders stay identical.
+live:
+  # §3.6. Long enough that a scorer can still resolve an older snapshot, short enough
+  # that abandoned ones expire on their own instead of accumulating forever.
+  key_ttl_seconds: 259200
+  # The loop checks the watermark this often; a snapshot only becomes due once a day of
+  # event time has been flushed, so polling faster buys nothing.
+  poll_seconds: 1.0

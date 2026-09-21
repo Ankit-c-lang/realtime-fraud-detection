@@ -59,3 +59,8 @@ scorer:
   # Bounded observability lists (§3.6).
   alerts_keep: 500
   latency_keep: 1000
+
+backfill:
+  # Rows per MSET / ZADD. 21,552 account blobs in one command would block Redis for the
+  # whole write; chunking keeps each round trip short (§9.5).
+  chunk_size: 1000

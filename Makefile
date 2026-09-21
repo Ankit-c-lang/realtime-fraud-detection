@@ -95,4 +95,10 @@ bench:  ## Throughput and latency benchmark (PLAN §9.6)
 	@echo "not implemented yet: $@ — Phase 9, PLAN §9.6"; exit 1
 
 rescore-check:  ## Re-score live output offline and compare (PLAN §9.6)
-	@echo "not implemented yet: $@ — Phase 6, PLAN §9.6"; exit 1
+	$(RUN) python scripts/rescore_check.py
+
+backfill:  ## Load the checkpoint and first snapshot into Redis (PLAN §9.5)
+	$(RUN) python -m fraud.stream.backfill
+
+graph-refresh:  ## Publish live graph snapshots while the replay runs (PLAN §6.5)
+	$(RUN) python -m fraud.graph.refresh_live
