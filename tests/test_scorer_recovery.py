@@ -404,6 +404,33 @@ def test_startup_drains_this_consumers_own_pending(redis_client: Redis, tmp_path
     assert len(drained) == 3
 
 
+def test_draining_pages_past_the_batch_size(redis_client: Redis, tmp_path: Path) -> None:
+    """More pending messages than one read returns, which is where the cursor matters.
+
+    Reading with id "0" returns the consumer's pending entries from the beginning every
+    time. Without advancing the cursor this loop re-reads the same page forever: it
+    reported draining 19,900 messages when 201 were pending, and handed the scorer the
+    same events over and over. Only a fixture larger than `count` can catch that, which
+    is why this test exists alongside the three-message one.
+    """
+    _publish(redis_client, _events(25))
+    stream, group = _stream_group(redis_client)
+    ensure_group(redis_client, stream, group)
+    redis_client.xreadgroup(group, "scorer-1", {stream: ">"}, count=100)
+
+    drained = drain_own_pending(redis_client, stream, group, "scorer-1", 10)
+    assert len(drained) == 25
+    assert len({message_id for message_id, _ in drained}) == 25  # no repeats
+
+
+def test_draining_an_empty_pending_list_returns_nothing(redis_client: Redis) -> None:
+    _publish(redis_client, _events(3))
+    stream, group = _stream_group(redis_client)
+    ensure_group(redis_client, stream, group)
+
+    assert drain_own_pending(redis_client, stream, group, "scorer-1", 10) == []
+
+
 def test_a_restarted_scorer_replays_its_pending_work(redis_client: Redis, tmp_path: Path) -> None:
     _publish(redis_client, _events(3))
     stream, group = _stream_group(redis_client)
@@ -698,6 +725,42 @@ def test_metrics_reach_redis(redis_client: Redis, tmp_path: Path) -> None:
     assert int(metrics["flushes"]) == 1
     assert metrics["consumer"] == "scorer-1"
     assert metrics["heartbeat"]
+
+
+def test_metrics_accumulate_across_a_restart(redis_client: Redis, tmp_path: Path) -> None:
+    """HINCRBY on deltas, not HSET on absolutes (§9.2).
+
+    With HSET the counters reset every time the scorer restarts, so a crash makes the
+    dashboard's totals go backwards and "events processed" stops meaning anything.
+    """
+    _publish(redis_client, _events(2))
+    first = _scorer(redis_client, tmp_path)
+    first.startup()
+    first.run_once()
+    first._flush_and_ack(force=True)
+    assert int(redis_client.hget(METRICS_KEY, "events")) == 2
+
+    _publish(redis_client, _events(3))
+    second = _scorer(redis_client, tmp_path, consumer="scorer-1")
+    second.startup()
+    second.run_once()
+    second._flush_and_ack(force=True)
+
+    # 2 from the first process plus 3 from the second, not 3.
+    assert int(redis_client.hget(METRICS_KEY, "events")) == 5
+
+
+def test_repeated_publishes_do_not_double_count(redis_client: Redis, tmp_path: Path) -> None:
+    """Each publish sends only what has happened since the last one."""
+    _publish(redis_client, _events(2))
+    scorer = _scorer(redis_client, tmp_path)
+    scorer.startup()
+    scorer.run_once()
+    scorer._flush_and_ack(force=True)
+    scorer._publish(None, 0)
+    scorer._publish(None, 0)
+
+    assert int(redis_client.hget(METRICS_KEY, "events")) == 2
 
 
 def test_latency_samples_are_bounded(redis_client: Redis, tmp_path: Path) -> None:

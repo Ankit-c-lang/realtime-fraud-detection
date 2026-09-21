@@ -89,7 +89,8 @@ class ScorerMetrics:
     reclaimed: int = 0
     batches: int = 0
 
-    def as_increments(self) -> dict[str, int]:
+    def totals(self) -> dict[str, int]:
+        """Absolute counts for this process's lifetime."""
         return {
             "events": self.events,
             "alerts": self.alerts,
@@ -169,6 +170,8 @@ class Scorer:
         self._last_reclaim = clock()
         self._stopping = False
         self.metrics = ScorerMetrics()
+        # What has already been added to metrics:scorer, so each publish sends a delta.
+        self._published: dict[str, int] = {}
 
     # --- startup (PLAN §9.2) ---
 
@@ -234,7 +237,7 @@ class Scorer:
         # The exit path is not an afterthought: docker stop sends SIGTERM, and anything
         # buffered but unflushed here would be re-delivered and re-scored on restart.
         self._flush_and_ack(force=True)
-        logger.info("scorer %s stopped: %s", self.consumer, self.metrics.as_increments())
+        logger.info("scorer %s stopped: %s", self.consumer, self.metrics.totals())
         return self.metrics
 
     def run_once(self) -> int:
@@ -452,8 +455,16 @@ class Scorer:
         pipe = self._redis.pipeline(transaction=False)
         if watermark is not None:
             pipe.set(WATERMARK_KEY, watermark.isoformat())
-        for name, value in self.metrics.as_increments().items():
-            pipe.hset(METRICS_KEY, name, value)
+        # HINCRBY on the delta since the last publish, not HSET on the absolute count
+        # (PLAN §9.2). HSET resets the dashboard's counters every time the scorer
+        # restarts, so a crash mid-run makes the totals go backwards and the numbers
+        # stop meaning "events processed".
+        totals = self.metrics.totals()
+        for name, value in totals.items():
+            delta = value - self._published.get(name, 0)
+            if delta:
+                pipe.hincrby(METRICS_KEY, name, delta)
+        self._published = totals
         pipe.hset(METRICS_KEY, "heartbeat", datetime.now().isoformat(timespec="seconds"))  # noqa: DTZ005
         pipe.hset(METRICS_KEY, "consumer", self.consumer)
         pipe.execute()

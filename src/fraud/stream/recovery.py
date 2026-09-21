@@ -111,17 +111,25 @@ def drain_own_pending(
 ) -> list[Message]:
     """Every message this consumer still owns, oldest first (PLAN §9.2 startup).
 
-    Reads from id 0 repeatedly until a batch comes back empty. These are the messages the
-    previous incarnation of this consumer was holding when it died; they are invisible to
-    a normal ``>`` read.
+    These are the messages the previous incarnation of this consumer was holding when it
+    died; a normal ``>`` read never returns them. The list is paged on the last id seen,
+    for the reason spelled out below.
     """
     drained: list[Message] = []
+    cursor = OWN_PENDING
     while True:
-        batch = client.xreadgroup(group, consumer, {stream: OWN_PENDING}, count=count)
+        batch = client.xreadgroup(group, consumer, {stream: cursor}, count=count)
         messages = _flatten(batch)
         if not messages:
             break
         drained.extend(messages)
+        # The cursor MUST advance. Reading with id "0" returns the consumer's pending
+        # entries from the beginning every time — it is not a queue that drains as it is
+        # read. Looping on "0" re-reads the same page forever, reporting a wildly
+        # inflated count and handing the scorer the same messages again and again.
+        # Redis returns pending entries with an ID strictly greater than the one given,
+        # so paging on the last id seen is what actually walks the list.
+        cursor = messages[-1][0]
         if len(messages) < count:
             break
 

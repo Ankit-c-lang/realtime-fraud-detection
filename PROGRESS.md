@@ -4,49 +4,67 @@ Living status file. **Update it at the end of every completed task**, together w
 that task. Source of truth for *what* to build is `PLAN.md`; this file only tracks *where we are*.
 
 - **Plan version:** v1 (2026-09-16) · **Started:** 2026-09-20
-- **Current phase:** Phase 6 — Streaming pipeline (PLAN §17, Phase 6) · Phases 0-5 complete · tags `phase-0`, `sim-v1`, `phase-2`, `sim-v2`, **`sim-v2-fix1`**
+- **Current phase:** Phase 7 — FastAPI (PLAN §17, Phase 7) · Phases 0-6 complete · tags `phase-0`, `sim-v1`, `phase-2`, `sim-v2`, **`sim-v2-fix1`**
 - **Phase 1 progress:** 8 / 8 ✅ — **simulator FROZEN, tagged `sim-v1`**
 - **Phase 2 progress:** 7 / 7 ✅ — tagged `phase-2`
 - **Phase 3 progress:** 6 / 6 ✅ (E3 ablation belongs to Phase 4)
 - **Phase 4 progress:** 6 / 6 ✅
 - **Phase 5 progress:** 8 / 8 ✅ — **COMPLETE**, test split evaluated once on 2026-09-21
-- **Phase 6 progress:** 8 / 9 — **P6.4 complete**
-- **Overall:** 51 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Phase 6 progress:** 9 / 9 ✅ — **PHASE 6 COMPLETE**, full window replayed end to end
+- **Overall:** 52 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Nothing — P6.4 is done. Phase 6 needs only the full-window run to close.**
+**Nothing — Phase 6 is complete. The full test window has been replayed end to end.**
 
-`stream/backfill.py`, the `graph/refresh_live.py` loop and `scripts/rescore_check.py` are
-in. **633 tests green: 520 unit + 113 Redis integration.**
+### 🚩 Day-10 checkpoint MET (2026-09-21)
 
-### The whole pipeline ran end to end on real data
+The 18-day test window replayed at 3,600x through Redis, scored live, with the graph
+refresh publishing snapshots concurrently and the scorer **hard-killed mid-run** and
+restarted.
 
-Isolated `DATA_DIR`, Redis DB 15, 20,000 events (2026-03-14 → 2026-03-17):
-
-| Stage | Result |
+| | |
 |---|---|
-| Backfill | 21,552 account blobs, 181,368 entity members, first snapshot (2,523 accounts) published |
-| Replay | 20,000 events onto `txn:events` |
-| Scorer | 20,000 events, 229 alerts (**1.15%**), 0 pending, 15 flushes, **617 events/s** |
-| Graph refresh | 3 snapshots published (03-15, 03-16, 03-17), ~3.4 s each |
+| Events replayed | **102,987** |
+| Unique scored rows | **102,987** — and 102,987 raw rows, so no duplicate was even produced |
+| Alerts | **2,151 REVIEW**, 0 HOLD (the tier is disabled in v1) |
+| Date partitions / snapshots published | 18 / 18 |
+| Pending at the end | 0 |
+| Watermark | `2026-03-31T23:59:50`, the last event in the window |
 
-**The §9.6 re-score check passes with `max |diff| = 0.00e+00` on all three comparisons** —
-not "within 1e-9", bit-identical:
+**`make rescore-check` passes at `max |diff| = 0.00e+00` on all three comparisons** —
+bit-identical, not merely inside the 1e-9 tolerance:
 
-- **re-score** — 20,000 rows, stored features reproduce the stored scores exactly
-- **hot features** — 20,000 rows × 30 features identical to `hot_features.parquet`, so the
-  Redis state path and the in-memory path have not drifted anywhere
-- **graph parity** — 3 boundaries, live snapshots equal the offline ones exactly
+```
+re-score        PASS  102,987 rows, max |diff| 0.00e+00 (tolerance 1e-09)
+hot features    PASS  102,987 rows compared across 30 features, max |diff| 0.00e+00
+graph parity    PASS  3 boundaries, max |diff| 0.00e+00
+graph staleness p50 17.1 h, p95 23.5 h, max 33.2 h; 102,987/102,987 rows resolved a snapshot
+```
 
-The backfill's value is visible: the alert rate fell from **3.1% cold to 1.15% warm**,
-against 2.09% measured offline on the full window.
+### Live vs offline metrics (§9.6 item 4)
 
-Reported staleness is p50 42.1 h / p95 85.3 h, which is an artefact of running the refresh
-*after* all scoring rather than concurrently. The three-terminal run will measure it
-properly.
+Every operating-point metric is **identical** to the recorded offline E4 test result:
+
+| Metric | Live | Offline E4 | Δ |
+|---|---|---|---|
+| precision | 0.957694 | 0.957694 | 0 |
+| recall | 0.992771 | 0.992771 | 0 |
+| F1 | 0.974917 | 0.974917 | 0 |
+| alert rate | 0.020886 | 0.020886 | 0 |
+| alerts | 2,151 | 2,151 | 0 |
+| value detection | 0.995852 | 0.995852 | 0 |
+| PR-AUC | 0.993778 | 0.993788 | −9.75e−06 |
+| VEL / ATO / CT / RING recall | 0.9677 / 1.0 / 1.0 / 0.9948 | identical | 0 |
+
+The only difference is PR-AUC at the sixth decimal. Risk scores are bit-identical, so it
+is tie ordering inside `average_precision_score`: the live rows come back ordered by
+`txn_id` and the offline ones in row order, and tied scores rank differently between the
+two. Nothing was tuned, and `metrics.test` was not rewritten.
+
+**633+ tests green: 520 unit + 117 Redis integration.**
 
 Phase 5 outputs untouched: `sim.yaml` still `4013268a…`, `models/v1` still PR-AUC 0.99377
 valid / 0.99379 test, `reports/` and `models/` byte-unchanged, `test_runs.log` one line.
@@ -55,10 +73,10 @@ valid / 0.99379 test, `reports/` and `models/` byte-unchanged, `test_runs.log` o
 
 ## Next up (in order)
 
-1. **Full-window end-to-end run** (Phase 6 task 8) — the 18-day test window at 3,600x in three terminals, then `make rescore-check`. Commands are in *How to run the replay* below.
-2. **Phase 7** — FastAPI per §10 (`/score` must never write state).
-3. **Phase 8** — the Streamlit dashboard, reading through `storage/duck.py`.
-4. **Phase 9** — Docker Compose, `make smoke`, `make bench`, `reports/benchmark.md`.
+1. **Phase 7 / P7.1** — FastAPI per §10: `/health`, `/score` (**must never write state**), `/transactions/{id}`, `/alerts`, `/stats`, with `test_api.py`.
+2. **Phase 8** — the Streamlit dashboard, reading through `storage/duck.py`.
+3. **Phase 9** — Docker Compose, `make smoke`, `make bench`, `reports/benchmark.md`.
+4. **Phase 10** — README, demo recording, interview prep.
 
 ---
 
@@ -172,6 +190,7 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-21 | 6 | `storage/parquet_io.py` (atomic temp+rename), `storage/duck.py` (§9.4 deduplicating view + the three monitoring queries), `stream/sink.py` (buffer, flush policy, watermark, per-date files) | `tests/test_sink.py` 32; smoke: 500 real scored rows through sink → DuckDB |
 | 2026-09-21 | 6 | `stream/scorer.py` + `stream/recovery.py` + graph keyspace helpers — micro-batch loop, pending drain, `XPENDING`/`XCLAIM` reclaim, DLQ, snapshot-before-commit, HOLD, ack-after-flush, metrics, SIGTERM, `crash_after` | `tests/test_scorer_recovery.py` 37 (every §9.3 row); smoke: 1,500 events → 1,500 unique rows through `models/v1` |
 | 2026-09-21 | 6 | `stream/backfill.py` (§9.5), `graph/refresh_live.py` loop (§6.5), `scripts/rescore_check.py` (§9.6) + `make backfill` / `graph-refresh` / `rescore-check` | `tests/test_graph_live.py` 25 + `tests/test_rescore_check.py` 15; **20,000-event end-to-end run: re-score, hot features and graph parity all `0.00e+00`** |
+| 2026-09-21 | 6 | **Full test window replayed end to end at 3,600x**, scorer SIGKILLed mid-run and restarted, graph refresh concurrent | 102,987 events → 102,987 unique rows, 2,151 alerts; `make rescore-check` `0.00e+00`; live metrics identical to offline E4 |
 
 ---
 
@@ -241,7 +260,7 @@ before continuing — do not silently slip.
 - [x] 8. `test_scoring.py` (31) + `test_reason_codes.py` (16) ✅ 2026-09-20 · `test_training_smoke.py` part 2 still open
 - **🚩 CHECKPOINT (end of Day 8): MET ✅ 2026-09-21** — `models/v1/` and `reports/results.md` exist; `reports/test_runs.log` has exactly one line.
 
-### Phase 6 — Streaming pipeline (Days 9-10, ~16 h, 7/10) — IN PROGRESS (8 / 9), P6.1-P6.4 complete; only the full-window run remains
+### Phase 6 — Streaming pipeline (Days 9-10, ~16 h, 7/10) — ✅ COMPLETE (2026-09-21)
 - [x] 1. `features/store_redis.py` **first**, + `test_parity_redis.py` (19) + `test_idempotency.py` (15) ✅ 2026-09-21
 - [x] 2. `stream/replayer.py` — pacing, label stripping, backpressure ✅ 2026-09-21 (`tests/test_replayer.py`, 45)
 - [x] 3. `stream/sink.py` + `storage/parquet_io.py` + `storage/duck.py` — atomic writes, watermark, dedup view ✅ 2026-09-21 (`tests/test_sink.py`, 32)
@@ -249,9 +268,9 @@ before continuing — do not silently slip.
 - [x] 5. `stream/backfill.py` (§9.5) ✅ 2026-09-21
 - [x] 6. `graph/refresh_live.py` refresh loop (§6.5) ✅ 2026-09-21
 - [x] 7. `scripts/rescore_check.py` (§9.6) ✅ 2026-09-21 — passes at `0.00e+00` on a 20,000-event run
-- [ ] 8. End-to-end run: full test window at 3,600x (replayer + scorer + graph-refresh)
+- [x] 8. End-to-end run: full test window at 3,600x (replayer + scorer + graph-refresh) ✅ 2026-09-21 — 102,987 events, 102,987 unique rows, scorer hard-killed and restarted mid-run
 - [x] 9. `test_graph_live.py` ✅ 25 + `test_rescore_check.py` ✅ 15 (`test_sink.py` ✅ 32, `test_replayer.py` ✅ 45, `test_scorer_recovery.py` ✅ 37)
-- **🚩 CHECKPOINT (end of Day 10): test window replays end to end; re-score check 100% identical;** live snapshot == offline for 3 boundaries
+- **🚩 CHECKPOINT (end of Day 10): MET ✅ 2026-09-21** — window replayed end to end; re-score check `0.00e+00`; live snapshots == offline at 3 boundaries
 
 ### Phase 7 — FastAPI (Day 11 am, ~5 h, 3/10)
 - [ ] 1. `schemas.py` models
@@ -399,6 +418,9 @@ again in either file.
 | 2026-09-21 | The re-score check compares **hot** features only | Warm features legitimately differ: the live system may be a snapshot behind while the next one is still computing. §6.5 calls that staleness and asks for it to be *reported*, so the check prints p50/p95/max hours instead of failing on it | §6.5, §9.6 |
 | 2026-09-21 | `make backfill` must run **before** the replayer | §9.5 creates the consumer group at id `0` with `MKSTREAM`. Started after the replayer, or created at `$`, the group would silently skip every event already in the stream and those would never be scored | §9.5 |
 | 2026-09-21 | Stale `data/scored/` output from the falsy-sink bug was removed | The P6.3 bug wrote 17 files (33 rows, 4 distinct txn_ids) into the real `data/scored/` before it was caught. Gitignored, so nothing reached a commit, but it would have polluted the first real replay and the dashboard's dedup view | §9.4 |
+| 2026-09-21 | **Bug found by the full-window run: `drain_own_pending` re-read the same page forever** | `XREADGROUP ... STREAMS <stream> 0` returns a consumer's pending entries *from the beginning* every call — it is not a queue that drains as it is read. The loop never advanced its cursor, so on restart it reported draining **19,900** messages when **201** were pending, and handed the scorer the same events repeatedly. Idempotency and the dedup view would have hidden the corruption; the only visible symptom was an absurd log line. Fixed by paging on the last id seen. The existing test used 3 messages against a page size of 200 and could never have caught it, so a 25-message/page-10 regression test was added | §9.2 |
+| 2026-09-21 | **`metrics:scorer` now uses HINCRBY on deltas, as §9.2 specifies** | It had been `HSET` with absolute values, so every scorer restart reset the counters — during the full-window run the published total went from 22,900 back to 0 and climbed again, making "events processed" meaningless on a dashboard and confusing the run's own accounting | §9.2 |
+| 2026-09-21 | Live PR-AUC differs from offline by 9.75e-06; everything else is identical | Risk scores are bit-identical (`rescore-check` reports `0.00e+00`), so this is tie ordering inside `average_precision_score`: the live rows arrive ordered by `txn_id`, the offline ones in row order, and tied scores rank differently. Reported rather than chased; precision, recall, F1, alert rate, alert count, value detection and all four per-pattern recalls match exactly | §9.6 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---
