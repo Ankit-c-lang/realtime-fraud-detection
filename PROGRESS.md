@@ -14,53 +14,55 @@ that task. Source of truth for *what* to build is `PLAN.md`; this file only trac
 - **Phase 7 progress:** 5 / 5 ✅ — tagged `phase-7`
 - **Phase 8 progress:** 3 / 3 ✅ — tagged `phase-8`
 - **Phase 9 progress:** 7 / 7 ✅ — tagged `phase-9`, 3 green CI jobs
-- **Phase 10 progress:** 2 / 5
-- **Overall:** 69 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Phase 10 progress:** 4 / 5
+- **Overall:** 71 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Phase 10 · Task 5 done — the clean-clone rerun reproduces everything.**
+**Phase 10 · Tasks 3 and 4 done — `docs/cv_bullets.md` and `docs/interview_notes.md`.**
 
-Cloned to a fresh directory (no `data/`, empty `models/`), then `make setup all up demo`.
+### CV bullets, filled from measured values
 
-### Byte-identical, not merely close
+99.3% recall, 0.975 F1, 0.994 PR-AUC on test; 628 events/s at 318 ms p95. Three
+deliberate departures from the §20.3 template, each because the template's wording would
+have been false here:
 
-| Artifact | Original | Clone |
-|---|---|---|
-| `data/raw/events.parquet` | `68f222a7b2a9c4ee` | **same** |
-| `data/raw/labels.parquet` | `08d4c5ee580685e7` | **same** |
-| `data/raw/accounts.parquet` | `e503acc0ff1cd90d` | **same** |
-| `data/features/hot_features.parquet` | `96d11eb497a8bcdd` | **same** |
-| `data/features/training_table.parquet` | `1b6481e4a5d875b8` | **same** |
+- **"500K+" → "494K".** The simulator makes 494,189 events. Rounding up by 5,811 is the
+  easiest thing in a CV to be caught on.
+- **The ring-lift clause is dropped**, as §20.3 instructs when the lift is small. E2 and
+  E3 both score **1.00** ring recall on test — the lift is exactly zero. It is replaced
+  with the leave-one-pattern-out result, which is a real measurement.
+- **"SHAP reason codes" → "native-contribution reason codes".** The serving path uses
+  XGBoost's `pred_contribs`; `shap` appears once, offline, for a figure. Claiming SHAP in
+  production is the kind of thing an interviewer who knows the library spots instantly.
 
-Model metrics match to full float precision — `valid.pr_auc` `0.9937680386465483`,
-threshold `0.5128232795323753`, `alerts` 909, `blend_weight` 0.5, per-pattern recall
-identical — and `metrics.test` is **null**, so the clone did not read the test split.
+### Interview notes
 
-The Compose stack came up on freshly generated data and replayed 3,000 events to 3,000
-unique rows; `rescore_check` passed at `0.00e+00`. The clone was then removed.
+All 21 §21 questions answered with this project's own numbers rather than theory, and
+every quoted figure cross-checked against `reports/` — including the ones that are
+narrative rather than tabular (`0 of 65,604` legitimate rows, carrier-NAT median 114
+accounts/IP, 5,260 tied timestamps, additivity 2.0e-05).
 
-### Full window re-replayed in the main repo, through containers
+Several answers deliberately lead with something that went wrong, because those are the
+ones worth telling: the first latency harness reporting a p50 of 45 s, the tail that
+turned out to be the benchmark's own disk traffic, and E2's 0.9995 that forced the
+sim-v2 revision.
 
-102,987 events at 3,600×, 0 pending, 18 snapshots, and `make rescore-check` passing at
-**`max |diff| = 0.00e+00`** on all three comparisons. `data/scored/` now holds the full
-window again, ready for the recording.
-
-`metrics:scorer events` reads **102,987**, exactly matching the stream — the first full
-run since the HINCRBY fix, where the old `HSET` version reset the counter mid-run.
+Not linked from the README — it is preparation, not documentation.
 
 ---
 
 ## Next up (in order)
 
-1. **P10.3 — CV bullets** from `results.md` + `benchmark.md` (§20.3).
-2. **P10.4 — interview prep**, the §21 questions, optionally into `docs/interview_notes.md`.
-3. **P10.2 — demo recording (2-3 min)** — **the user records this**; I supply the shot list and exact commands, including `docker compose restart scorer` mid-replay showing no duplicates.
+**One task left: P10.2, the demo recording — and it is the user's to make.**
 
-The stack is up and `data/scored/` holds the full 102,987-row window, so the recording can
-be made without regenerating anything.
+The stack is up and `data/scored/` holds the full 102,987-row window, so nothing needs
+regenerating. The shot list and exact commands are in the assistant's reply; the recording
+then needs linking from the README.
+
+After that: 73/73, and the NICE-TO-HAVE list in §2.2 is the only thing left.
 
 ---
 
@@ -181,6 +183,7 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-21 | 9 | `Dockerfile` + full `docker-compose.yml` + `make up/demo/logs/demo-reset/smoke`; `scripts/benchmark_stream.py`, `capture_container_memory.sh`, `reports/benchmark.md`; CI grown to 3 jobs | `make smoke`: 2,000 events → 2,000 unique rows; peak **628 events/s**, p50 154 ms at half load |
 | 2026-09-21 | 10 | `README.md` — §17 Phase-10 order, synthetic-data caveat first, every number traced to `reports/` | 2,134 words; automated check of 28 figures against `results.md`, `benchmark.md`, `E5.json`, `manifest.json`, `metadata.json` |
 | 2026-09-21 | 10 | **Clean-clone rerun**: fresh clone → `make setup all up demo` | 5/5 parquet files byte-identical (SHA-256), model metrics identical to full float precision, `metrics.test` null; full window re-replayed through Compose, `rescore-check` `0.00e+00` |
+| 2026-09-21 | 10 | `docs/cv_bullets.md` and `docs/interview_notes.md` — placeholders filled from measured values, all 21 §21 questions answered | every figure cross-checked against `reports/` by script; 3 template departures documented |
 
 ---
 
@@ -287,8 +290,8 @@ before continuing — do not silently slip.
 ### Phase 10 — Documentation, demo, interview prep (Day 13 → Day 14 am, ~10 h, 3/10)
 - [x] 1. `README.md` in the §17 Phase-10 order (synthetic-data caveat on the first screen) ✅ 2026-09-21 — every figure verified against `reports/`
 - [ ] 2. Demo recording (2-3 min) incl. `docker compose restart scorer` mid-replay showing no duplicates
-- [ ] 3. CV bullets filled from `results.md` + `benchmark.md` (§20.3)
-- [ ] 4. Interview prep — §21 questions, optional `docs/interview_notes.md`
+- [x] 3. CV bullets filled from `results.md` + `benchmark.md` (§20.3) ✅ 2026-09-21 — `docs/cv_bullets.md`
+- [x] 4. Interview prep — all 21 §21 questions answered with measured numbers ✅ 2026-09-21 — `docs/interview_notes.md`
 - [x] 5. **Clean-clone rerun**: fresh clone → `make setup all up demo` → numbers match `reports/` ✅ 2026-09-21 — all five parquet files byte-identical, every metric to full precision
 
 ### NICE TO HAVE — only after every MUST item is done, in this order (§2.2)
@@ -426,6 +429,7 @@ again in either file.
 | 2026-09-21 | Compose overrides `REDIS_URL`/`DATA_DIR`/`MODEL_DIR`/`API_URL` rather than putting them in `.env` | §12.2 puts `REDIS_URL=redis://redis:6379/0` in `.env`, which breaks every host-side command — `localhost` and `redis` cannot both be right in one file, and §12.2's own "common mistakes" names that trap. `.env` keeps host defaults; the `x-app` anchor overrides the four container-specific values in `environment:`, which takes precedence. `env_file` is `required: false` so a fresh clone starts before anyone copies the template | §12.2 |
 | 2026-09-21 | The `image-build` CI job asserts more than "it built" | A built image that cannot import the package, or that carries pytest and shap, is not a working serving image and `docker build` would still be green. The job imports the four service entrypoints and asserts the dev/sim/analysis groups are absent | §12.1, §14 |
 | 2026-09-21 | README figures are verified against `reports/` by a script, not by eye | §0.4 requires every published number to come from a file. Checking by hand is how a stale figure survives: the draft quoted container memory rounded to `530 MiB` where the report says `529.5MiB`, and quoted HOLD-tier precision as `0.961` — correct three phases ago, but the margin and HINCRBY fixes moved it to `0.960`. Both were caught by comparing the README against the artifacts programmatically | §0.4 |
+| 2026-09-21 | Three departures from the §20.3 CV template, each to avoid a false claim | "500K+" overstates 494,189 by 5,811; the ring-lift clause is dropped because E2 and E3 both score 1.00 ring recall on test so the lift is **zero** (§20.3 itself says drop it when small); and "SHAP reason codes" is wrong because the serving path uses XGBoost's native `pred_contribs` — `shap` is used once, offline, for a figure | §20.3, §3.8 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---
