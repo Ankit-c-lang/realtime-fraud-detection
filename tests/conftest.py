@@ -10,7 +10,7 @@ from redis import Redis
 from redis.exceptions import ConnectionError as RedisConnectionError
 
 # Settings are read from the environment, so a test that sets one must not leak it (PLAN §13).
-_MANAGED_VARS = ("REDIS_URL", "DATA_DIR", "MODEL_DIR", "MODEL_VERSION")
+_MANAGED_VARS = ("REDIS_URL", "DATA_DIR", "MODEL_DIR", "MODEL_VERSION", "CONSUMER_NAME")
 
 # Integration tests only ever touch this database, never the one the services use.
 _TEST_DB = 15

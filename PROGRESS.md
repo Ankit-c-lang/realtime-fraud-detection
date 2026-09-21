@@ -10,47 +10,50 @@ that task. Source of truth for *what* to build is `PLAN.md`; this file only trac
 - **Phase 3 progress:** 6 / 6 ✅ (E3 ablation belongs to Phase 4)
 - **Phase 4 progress:** 6 / 6 ✅
 - **Phase 5 progress:** 8 / 8 ✅ — **COMPLETE**, test split evaluated once on 2026-09-21
-- **Phase 6 progress:** 3 / 9 — **P6.2 complete**
-- **Overall:** 46 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Phase 6 progress:** 4 / 9 — **P6.3 complete**
+- **Overall:** 47 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Nothing — P6.2 is complete. The scorer has deliberately not been started.**
+**Nothing — P6.3 is done.**
 
-`storage/parquet_io.py`, `storage/duck.py` and `stream/sink.py` are in, closing the
-remainder of PLAN's P6.2. **556 tests green: 505 unit + 51 Redis integration.**
+`stream/scorer.py` and `stream/recovery.py` are in, plus the graph keyspace helpers in
+`graph/refresh_live.py` and `Settings.consumer_name`. **593 tests green: 505 unit +
+88 Redis integration.**
 
-What the tests establish:
+Every row of the §9.3 failure matrix has a test, driven by the `crash_after` hook:
 
-- **Atomic writes.** Every Parquet write lands as `<name>.parquet.tmp` then `os.replace`.
-  A test patches `os.replace` to fail and asserts no readable file appears *and* no
-  `.tmp` litter is left. Readers glob `*.parquet`, so a temp file is invisible by
-  construction rather than by convention.
-- **Ack ordering.** `flush()` returns exactly the ids it made durable, so the scorer can
-  only `XACK` what survives a crash; the ids never reach a Parquet column.
-- **Deduplication.** §9.3's crash-between-flush-and-ack case is *allowed*, so the DuckDB
-  view resolves it — writing the same rows twice yields 2 files and 3 rows, keeping the
-  earliest `scored_ts`.
-- **Date partitioning on event time**, splitting a batch that crosses midnight, so a
-  3600x replay partitions exactly as a live run would.
-- **Flush policy** ≥ 2,000 rows or 2 s, on an injected clock.
+| Crash point | Asserted outcome |
+|---|---|
+| Before the feature commit | Redis unchanged, no Parquet, message still pending |
+| After commit, before flush | State updated once, no Parquet, still pending → row written **once** on restart |
+| After flush, before ack | Row durable but **not acked** → restart writes an identical duplicate, DuckDB view returns 2 |
+| Poison message | DLQ entry + ack, and good messages behind it still score |
 
-Smoke-tested end to end on real output: 500 rows scored through `models/v1` → one Parquet
-file → DuckDB dedup view → all three §9.4 monitoring queries returning (riskiest
-merchants, hourly alert rate, latency percentiles).
+Also covered: startup drain of own pending, `XPENDING`/`XCLAIM` reclaim, the
+delivery-count DLQ rule, snapshot resolution (including that a redelivery **reuses its
+original snapshot**), HOLD annotation as output-only, alerts/metrics/watermark, and the
+SIGTERM exit path.
 
-Phase 5 outputs untouched: `sim.yaml` still `4013268a…`, `models/v1` still PR-AUC
-0.99377 valid / 0.99379 test, `reports/` and `models/` byte-unchanged, `test_runs.log`
-still one line.
+End-to-end smoke on DB 15 with the real `models/v1`: 1,500 replayed events → **1,500
+unique scored rows**, 47 REVIEW, 0 HOLD (correct — the tier is disabled in v1), 0 pending,
+watermark `2026-03-14T12:41:25`.
+
+⚠️ Two things that are expected to look wrong until P6.4: `graph_snapshot_ts` is `null`
+because nothing publishes snapshots yet, and the alert rate reads high (3.1% vs the 2.09%
+measured on test) because there is no backfill, so every account starts cold.
+
+Phase 5 outputs untouched: `sim.yaml` still `4013268a…`, `models/v1` still PR-AUC 0.99377
+valid / 0.99379 test, `reports/` and `models/` byte-unchanged, `test_runs.log` one line.
 
 ---
 
 ## Next up (in order)
 
-1. **P6.3** — `stream/scorer.py` and `stream/recovery.py`: consumer group, pending drain at startup, `XPENDING`/`XCLAIM` reclaim with the delivery-count DLQ rule, graph snapshot resolved before commit, `XACK` only after the sink flush, `meta:state_version` check (`RedisStore.check_state_version` is ready). Plus `test_scorer_recovery.py` with the `crash_after=` hook covering every row of the §9.3 failure matrix.
-2. **P6.4** — `stream/backfill.py` (§9.5), `graph/refresh_live.py` (§6.5), `scripts/rescore_check.py` (§9.6).
+1. **P6.4** — `stream/backfill.py` (§9.5: checkpoint into Redis, first snapshot, group creation, markers), `graph/refresh_live.py`'s refresh loop (§6.5, with the guard that history is read only for `event_time < test_start`) + `test_graph_live.py`, and `scripts/rescore_check.py` (§9.6).
+2. **End-to-end run** of the full test window at 3,600x in three terminals, then the re-score check.
 3. **Phase 7** — FastAPI (`/score` must never write state).
 4. **Phase 8** — the Streamlit dashboard, reading through `storage/duck.py`.
 
@@ -139,6 +142,7 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-21 | 6 | `features/store_redis.py` — `RedisStore` on the §3.6 key schema: pipelined load, one `MULTI/EXEC` commit, `ZADD GT`, `ZCOUNT` with an exclusive upper bound, periodic trim, `meta:state_version` guard | `tests/test_parity_redis.py` 19 + `tests/test_idempotency.py` 15, on DB 15 |
 | 2026-09-21 | 6 | `stream/replayer.py` + `configs/stream.yaml` + `TransactionEvent.from_message` — three pacing modes, total ordering, label-free messages, backpressure with hysteresis | `tests/test_replayer.py` 45 (33 unit + 12 Redis); smoke: 2,000 real events onto `txn:events` |
 | 2026-09-21 | 6 | `storage/parquet_io.py` (atomic temp+rename), `storage/duck.py` (§9.4 deduplicating view + the three monitoring queries), `stream/sink.py` (buffer, flush policy, watermark, per-date files) | `tests/test_sink.py` 32; smoke: 500 real scored rows through sink → DuckDB |
+| 2026-09-21 | 6 | `stream/scorer.py` + `stream/recovery.py` + graph keyspace helpers — micro-batch loop, pending drain, `XPENDING`/`XCLAIM` reclaim, DLQ, snapshot-before-commit, HOLD, ack-after-flush, metrics, SIGTERM, `crash_after` | `tests/test_scorer_recovery.py` 37 (every §9.3 row); smoke: 1,500 events → 1,500 unique rows through `models/v1` |
 
 ---
 
@@ -208,16 +212,16 @@ before continuing — do not silently slip.
 - [x] 8. `test_scoring.py` (31) + `test_reason_codes.py` (16) ✅ 2026-09-20 · `test_training_smoke.py` part 2 still open
 - **🚩 CHECKPOINT (end of Day 8): MET ✅ 2026-09-21** — `models/v1/` and `reports/results.md` exist; `reports/test_runs.log` has exactly one line.
 
-### Phase 6 — Streaming pipeline (Days 9-10, ~16 h, 7/10) — IN PROGRESS (3 / 9), P6.1 + P6.2 complete
+### Phase 6 — Streaming pipeline (Days 9-10, ~16 h, 7/10) — IN PROGRESS (4 / 9), P6.1-P6.3 complete
 - [x] 1. `features/store_redis.py` **first**, + `test_parity_redis.py` (19) + `test_idempotency.py` (15) ✅ 2026-09-21
 - [x] 2. `stream/replayer.py` — pacing, label stripping, backpressure ✅ 2026-09-21 (`tests/test_replayer.py`, 45)
 - [x] 3. `stream/sink.py` + `storage/parquet_io.py` + `storage/duck.py` — atomic writes, watermark, dedup view ✅ 2026-09-21 (`tests/test_sink.py`, 32)
-- [ ] 4. `stream/scorer.py` — micro-batch loop, pending drain/reclaim, DLQ, ack-after-flush, HOLD, metrics, SIGTERM, `crash_after` hook
+- [x] 4. `stream/scorer.py` + `stream/recovery.py` — micro-batch loop, pending drain/reclaim, DLQ, ack-after-flush, HOLD, metrics, SIGTERM, `crash_after` hook ✅ 2026-09-21 (`tests/test_scorer_recovery.py`, 37)
 - [ ] 5. `stream/backfill.py` (§9.5)
-- [ ] 6. `graph/refresh_live.py` (§6.5)
+- [ ] 6. `graph/refresh_live.py` refresh loop (§6.5) — keyspace + lookup helpers already in place
 - [ ] 7. `scripts/rescore_check.py` (§9.6)
 - [ ] 8. End-to-end run: full test window at 3,600x (replayer + scorer + graph-refresh)
-- [ ] 9. `test_scorer_recovery.py` and `test_graph_live.py` (`test_sink.py` ✅ 32, `test_replayer.py` ✅ 45)
+- [ ] 9. `test_graph_live.py` (`test_sink.py` ✅ 32, `test_replayer.py` ✅ 45, `test_scorer_recovery.py` ✅ 37)
 - **🚩 CHECKPOINT (end of Day 10): test window replays end to end; re-score check 100% identical;** live snapshot == offline for 3 boundaries
 
 ### Phase 7 — FastAPI (Day 11 am, ~5 h, 3/10)
@@ -356,6 +360,11 @@ again in either file.
 | 2026-09-21 | The sink resumes its file sequence from disk instead of restarting at `000000` | §9.4 names files `part-<consumer>-<seq:06d>.parquet` but says nothing about restarts. A restarted scorer with the same consumer name would begin again at `000000` and **overwrite its predecessor's output**, losing scored rows with no error anywhere. `ParquetSink` scans `data/scored/*/part-<consumer>-*.parquet` at construction and continues from the highest number found | §9.4, invariant 7 |
 | 2026-09-21 | `storage/duck.py` defines an empty placeholder view when no scored Parquet exists yet | `read_parquet` raises on a glob matching nothing, and the dashboard starts before the scorer has written anything. Rather than make every caller handle a missing relation, `connect()` defines `scored` as a zero-row view carrying only `txn_id` until real files appear, with `has_scored_data()` available to distinguish the two states | §9.4, §11 |
 | 2026-09-21 | The §9.4 monitoring queries live in `storage/duck.py`, not copied into the README and the dashboard | §9.4 says they go in both. Two copies drift, and §0.4 requires the number in the README to be the number the system shows. One definition, imported by both | §0.4, §9.4 |
+| 2026-09-21 | **Bug caught by the tests: `self._sink = sink or ParquetSink(...)` discarded every injected sink** | `ParquetSink` defines `__len__`, so an empty sink is falsy and `or` replaced it — silently writing to the real `data/scored` instead of where the caller asked. It only surfaced because a test asserted zero rows in its own temp directory. Now an explicit `is not None`. The same trap does not apply to `model`/`store`/`accounts`, which already used `is None` checks | §9.2 |
+| 2026-09-21 | **Bug caught by the tests: `reclaim()` called `xclaim(message=...)`** | redis-py's parameter is `message_ids`; the keyword was silently accepted into `**kwargs` and no message was ever claimed. Reclaim would have been a no-op in production, so an abandoned consumer's messages would sit pending forever with no error | §9.2 |
+| 2026-09-21 | `graph:published` uses epoch **seconds**, unlike the entity sorted sets | §3.6 specifies seconds for this key. The millisecond deviation in `store_redis.py` was forced by correctness (two events in one second must not collapse); snapshots are midnight-aligned and a day apart, so there is no such pressure here and the plan is followed. `from_epoch_seconds` is arithmetic on EPOCH, never `datetime.fromtimestamp`, which would read the value in the host's local zone | §3.6, §6.5 |
+| 2026-09-21 | `Scorer.run(stop_when_idle=...)` added beyond §9.2 | The service blocks and waits forever, which is right for a service and makes it untestable and unusable for a bounded replay. The flag exits after an empty read; the service never sets it | §9.2 |
+| 2026-09-21 | The graph key layout lives in `graph/refresh_live.py`, not in the scorer | The refresh service writes those keys and the scorer reads them. If they disagreed about a key name or a timestamp unit nothing would raise — every lookup would miss and every event would silently score on §6.3 defaults | §3.6, §6.5 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---

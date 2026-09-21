@@ -187,13 +187,20 @@ def test_flush_returns_exactly_the_ids_it_wrote(tmp_path: Path) -> None:
     assert sink.flush().message_ids == ids
 
 
-def test_ids_do_not_leak_into_the_parquet(tmp_path: Path) -> None:
-    """Stream ids are transport state, not data."""
+def test_the_sink_adds_no_columns_of_its_own(tmp_path: Path) -> None:
+    """The ids passed to `append` are transport state and must not become data.
+
+    §9.2's scored-row schema does include `stream_id` — but the *scorer* puts it there
+    deliberately, for the §9.6 re-score check. The sink writes the row it was given and
+    nothing else, so the ack list and the row contents cannot drift into each other.
+    """
     sink = _sink(tmp_path)
-    sink.append(_rows(2), _ids(2))
+    rows = _rows(2)
+    sink.append(rows, _ids(2))
     frame = pd.read_parquet(sink.flush().paths[0])
+
+    assert set(frame.columns) == set(rows[0])
     assert "message_id" not in frame.columns
-    assert "stream_id" not in frame.columns
 
 
 def test_mismatched_rows_and_ids_are_refused(tmp_path: Path) -> None:

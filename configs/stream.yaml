@@ -37,3 +37,25 @@ sink:
   # worth writing, or enough time that a quiet stream still reaches the dashboard.
   max_rows: 2000
   max_seconds: 2.0
+
+scorer:
+  # Micro-batch loop (PLAN §9.2).
+  batch_size: 200
+  block_ms: 1000
+
+  reclaim:
+    # A message idle this long belongs to a consumer that is probably gone.
+    every_seconds: 30
+    idle_ms: 60000
+    count: 100
+    # Past this many deliveries the message is poison, not unlucky: it has now crashed
+    # three consumers, and retrying it a fourth time only stalls the stream (§9.3).
+    max_deliveries: 3
+
+  # HOLD freezes the account for what follows (§7.7). Dormant in v1, where the tier is
+  # disabled, but the mechanism is here and tested.
+  hold_ttl_seconds: 604800
+
+  # Bounded observability lists (§3.6).
+  alerts_keep: 500
+  latency_keep: 1000

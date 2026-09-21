@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+import socket
+from dataclasses import dataclass, field
 from functools import cache, lru_cache
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,10 @@ class Settings:
     data_dir: Path
     model_dir: Path
     model_version: str | None
+    # §9.2: `me = CONSUMER_NAME or hostname`. The name is what owns pending messages, so
+    # two scorers sharing one would each drain the other's work at startup. It defaults
+    # rather than being required, because only the scorer cares which name it has.
+    consumer_name: str = field(default_factory=socket.gethostname)
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -38,6 +43,7 @@ class Settings:
             data_dir=_env_path("DATA_DIR", PROJECT_ROOT / "data"),
             model_dir=_env_path("MODEL_DIR", PROJECT_ROOT / "models"),
             model_version=os.environ.get("MODEL_VERSION") or None,
+            consumer_name=os.environ.get("CONSUMER_NAME") or socket.gethostname(),
         )
 
     # Storage layout (PLAN §3.7). Nothing outside this class hard-codes these paths.
