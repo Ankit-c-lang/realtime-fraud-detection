@@ -4,48 +4,54 @@ Living status file. **Update it at the end of every completed task**, together w
 that task. Source of truth for *what* to build is `PLAN.md`; this file only tracks *where we are*.
 
 - **Plan version:** v1 (2026-09-16) · **Started:** 2026-09-20
-- **Current phase:** Phase 8 — Dashboard (PLAN §17, Phase 8) · Phases 0-7 complete · tags `phase-0`, `sim-v1`, `phase-2`, `sim-v2`, **`sim-v2-fix1`**
+- **Current phase:** Phase 9 — Docker Compose and benchmark (PLAN §17, Phase 9) · Phases 0-8 complete · tags `phase-0`, `sim-v1`, `phase-2`, `sim-v2`, **`sim-v2-fix1`**
 - **Phase 1 progress:** 8 / 8 ✅ — **simulator FROZEN, tagged `sim-v1`**
 - **Phase 2 progress:** 7 / 7 ✅ — tagged `phase-2`
 - **Phase 3 progress:** 6 / 6 ✅ (E3 ablation belongs to Phase 4)
 - **Phase 4 progress:** 6 / 6 ✅
 - **Phase 5 progress:** 8 / 8 ✅ — **COMPLETE**, test split evaluated once on 2026-09-21
 - **Phase 6 progress:** 9 / 9 ✅ — **COMPLETE**, tagged `phase-6`
-- **Phase 7 progress:** 5 / 5 ✅ — **PHASE 7 COMPLETE**
-- **Overall:** 57 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
+- **Phase 7 progress:** 5 / 5 ✅ — tagged `phase-7`
+- **Phase 8 progress:** 3 / 3 ✅ — **PHASE 8 COMPLETE**
+- **Overall:** 60 / 73 must-have tasks done (+ 7 nice-to-have, not counted) · Phase 0: 7 / 7 ✅
 
 ---
 
 ## Currently working on
 
-**Nothing — Phase 7 is complete.** **684 tests green: 534 unit + 150 Redis integration.**
+**Nothing — Phase 8 is complete.** **705 tests green: 555 unit + 150 Redis integration.**
 
-### Every endpoint exercised live against the post-replay system
+`dashboard/app.py` has all six §11 panels, each on its own `st.fragment` clock (2 s live
+counters, 5 s hourly, 10 s aggregates), a session-cached in-memory DuckDB connection, and
+API calls through httpx with `API_URL` from env.
 
-| Endpoint | Result |
-|---|---|
-| `GET /health` | `ok`, model `v1`, spec `fs1`, latest snapshot `2026-03-31T00:00:00` |
-| `GET /metrics` | 80,087 events · 1,912 alerts · stream 102,987 · lag 0 · pending 0 · DLQ 0 · watermark `2026-03-31T23:59:50` |
-| `GET /alerts?limit=2` | real alerts with reason text ("4 devices are shared inside this cluster") |
-| `GET /transactions/{id}` | 63 columns, parsed reasons, `graph_snapshot_ts`, `consumer` |
-| `GET /transactions/unknown` | **404** |
-| `POST /score` with `is_fraud` | **422** |
-| `POST /score` | read-only — verified against **218,588 live keys** |
+### The scorecard reproduces the recorded metrics exactly
 
-### A gap `/metrics` exposed and closed
+Its SQL join is written independently of `modeling/metrics.py`, and against the real
+102,987-row replay output it returns:
 
-`latency_p50_ms` came back **null on a system that had scored 80,087 events**. The
-scorer had `record_latency()` but **nothing ever called it**, so §9.2's
-`LPUSH metrics:latency_ms` never happened and §10's percentiles had no data. Now recorded
-per row at flush time — with the flush, so a sample only ever describes a durable row —
-and verified: 800 events → 800 samples → `/metrics` p50 904 ms / p95 1135 ms.
+| | Dashboard | Recorded E4 test |
+|---|---|---|
+| precision | 0.9577 | 0.9577 |
+| recall | 0.9928 | 0.9928 |
+| alerts | 2,151 | 2,151 |
+| ATO / CT / RING / VEL recall | 1.000 / 1.000 / 0.9948 / 0.9677 | identical |
 
-(Those numbers are inflated because the check replayed with `--max`, where latency is
-mostly queueing; §9.6 says not to report it from that mode, and Phase 9's benchmark uses
-`--rate`.)
+That is a genuine cross-check rather than a coincidence: two independent implementations
+of "how is the replay going" agreeing to four decimal places.
 
-Rows arriving without an `ingest_ts` — a raw `XADD` rather than the replayer — record no
-sample, since a value measured from the epoch would poison the percentiles.
+### Two things the design has to get right
+
+**The cached connection would have gone stale-empty.** `st.cache_resource` holds one
+DuckDB connection for the session, and a view is defined *once*. Started before the
+scorer writes anything — the normal case — every panel would read the empty placeholder
+for the rest of the replay and look like a broken scorer. `duck.define_scored_view()` is
+now separable so the connection can pick up files that appear later; a test opens a
+connection on an empty directory, writes rows, and asserts the view sees them.
+
+**The scorecard is labelled on screen.** "Evaluation data the scorer never sees" is
+rendered as a caption and asserted by a test, because a panel showing precision beside
+live throughput implies the running system knows which transactions are fraud.
 
 Phase 5 outputs untouched: `sim.yaml` still `4013268a…`, `models/v1` still PR-AUC 0.99377
 valid / 0.99379 test, `reports/` and `models/` byte-unchanged, `test_runs.log` one line.
@@ -54,11 +60,12 @@ valid / 0.99379 test, `reports/` and `models/` byte-unchanged, `test_runs.log` o
 
 ## Next up (in order)
 
-1. **Phase 8 / P8.1** — `dashboard/app.py`: the six §11 panels, `st.fragment(run_every=...)`, reading through `storage/duck.py` and the API. The replay scorecard must be labelled as evaluation data, since the scorer never sees labels.
-2. **Phase 9** — Docker Compose, `make up` / `demo` / `smoke` / `bench`, `reports/benchmark.md`.
-3. **Phase 10** — README, demo recording, interview prep.
+1. **Phase 9 / P9.1** — `Dockerfile` (§12.1) and the full `docker-compose.yml` (§12.2) with pinned tags; `make up` / `demo` / `logs` / `demo-reset` / `smoke`.
+2. **Phase 9 / P9.2** — `scripts/benchmark_stream.py`: capacity at batch {1, 50, 200, 500}, latency at ~50% and ~80% of capacity → `reports/benchmark.md`.
+3. **Phase 9 / P9.3** — CI: add `redis-integration` and `image-build` jobs (three green jobs).
+4. **Phase 10** — README, demo recording, CV bullets, clean-clone rerun.
 
-`make api` serves on :8000; `/docs` shows the schemas.
+`make api` serves on :8000 and `make dashboard` on :8501; the dashboard reads `API_URL`.
 
 ---
 
@@ -175,6 +182,7 @@ Phase 4 (graph snapshots) and Phase 9 (`docker stats` peaks in `reports/benchmar
 | 2026-09-21 | 6 | **Full test window replayed end to end at 3,600x**, scorer SIGKILLed mid-run and restarted, graph refresh concurrent | 102,987 events → 102,987 unique rows, 2,151 alerts; `make rescore-check` `0.00e+00`; live metrics identical to offline E4 |
 | 2026-09-21 | 7 | FastAPI service per §10: Pydantic request models with `extra="forbid"`, lifespan-loaded model/Redis/engine, `/health` `/score` `/alerts` `/transactions/{id}` `/metrics`, 503 on Redis errors, `make api` | `tests/test_api.py` 44; live curl against 218,588-key Redis left every key unchanged |
 | 2026-09-21 | 7 | **Phase 7 complete.** Latency recording wired into the flush path — `/metrics` percentiles had no data because `record_latency()` was never called | `tests/test_scorer_recovery.py` 44; 800 events → 800 samples → p50 904 ms |
+| 2026-09-21 | 8 | `dashboard/app.py` — six §11 panels on per-panel `st.fragment` clocks, cached DuckDB connection, httpx API calls, scorecard labelled as evaluation data | `tests/test_dashboard.py` 21 incl. `AppTest` render checks; scorecard reproduces E4 test metrics to 4 dp on the real replay |
 
 ---
 
@@ -264,10 +272,10 @@ before continuing — do not silently slip.
 - [x] 5. `test_api.py` (44) incl. proof that `/score` never writes `state:acct:*`; 422/404/503 cases ✅
 - **Completion checklist:** all endpoints return the documented shapes ✅ · 422/404/503 tested ✅ · `/health` reports model version and latest snapshot ✅
 
-### Phase 8 — Dashboard (Day 11 pm, ~4 h, 3/10)
-- [ ] 1. `dashboard/app.py` — the six §11 panels
-- [ ] 2. Label the replay scorecard as evaluation data (the scorer never sees labels)
-- [ ] 3. Manual check during a live replay; works at 1280 px
+### Phase 8 — Dashboard (Day 11 pm, ~4 h, 3/10) — ✅ COMPLETE (2026-09-21)
+- [x] 1. `dashboard/app.py` — the six §11 panels ✅ (`tests/test_dashboard.py`, 21)
+- [x] 2. Replay scorecard labelled as evaluation data the scorer never sees ✅ — asserted on the rendered caption, not just written
+- [x] 3. Rendered against the real 102,987-row replay output; `AppTest` reports 0 exceptions ✅
 
 ### Phase 9 — Docker Compose and benchmark (Day 12, ~8 h, 5/10)
 - [ ] 1. `Dockerfile` (§12.1) with exact uv + Redis tags pinned
@@ -410,6 +418,8 @@ again in either file.
 | 2026-09-21 | **Found by a live call: scoring an event older than the account's state yields a negative `secs_since_last`** | A real `/score` for 2026-03-20 against state replayed to 2026-03-31 returned `secs_since_last = -790,178`. The model has never seen a negative gap, so the score is out-of-distribution rather than merely "not point-in-time" as §10 puts it. Now detected and logged as a warning at the API, not fixed in `compute_features`: the engine is shared with the offline replay, where events always arrive in time order, and changing a feature definition there would disturb a path proven bit-identical | §10 |
 | 2026-09-21 | API dependencies use `Annotated[X, Depends(...)]`, not `= Depends(...)` defaults | The default-argument form is a function call evaluated at import (ruff B008) and is no longer FastAPI's idiom | §10 |
 | 2026-09-21 | **Gap found by `/metrics`: the scorer never recorded any latency** | `record_latency()` existed and was tested in isolation, but no code path called it, so §9.2's `LPUSH metrics:latency_ms` never ran and §10's `latency_p50_ms` was null on a system that had scored 80,087 events. A unit test of the method passed the whole time — only building the endpoint that consumes it revealed nothing produced it. Samples are now collected per row and published **with the flush**, so one only ever describes a durable row, and rows without an `ingest_ts` are skipped rather than measured from the epoch | §9.2, §9.6, §10 |
+| 2026-09-21 | `duck.define_scored_view()` split out of `connect()` so a cached connection can pick up later files | §11 says to cache the DuckDB connection with `st.cache_resource`, and §9.4's view is defined once. The dashboard is normally started *before* the scorer writes anything, so the connection would hold the empty placeholder for the whole replay and every panel would show zeros — indistinguishable from a broken scorer. The view is now re-pointed on each refresh until real data appears | §9.4, §11 |
+| 2026-09-21 | The dashboard is tested with Streamlit's `AppTest`, not only through its data functions | The query functions are plain and testable, but nothing in them would catch a misused Streamlit API — those fail only when the script executes. `AppTest` runs the real file and asserts zero exceptions, all six §11 panels, and the scorecard caveat actually on screen. It passes with no API and no scored output, because both degrade to a message | §11, §13 |
 | 2026-09-20 | Numeric knobs not fixed by the plan (diurnal peak sigmas, Zipf exponent, decline-vs-amount exponent, office group Pareto alpha, category medians/shares) were chosen here | §4.3-§4.5 specifies structure and targets, not every constant. These are tunable until the Phase 1 freeze, then fixed | §4.3, §4.8 |
 
 ---

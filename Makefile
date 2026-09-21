@@ -105,3 +105,6 @@ graph-refresh:  ## Publish live graph snapshots while the replay runs (PLAN §6.
 
 api:  ## Run the FastAPI service on :8000 (PLAN §10)
 	$(RUN) uvicorn fraud.api.main:app --host 0.0.0.0 --port 8000
+
+dashboard:  ## Run the Streamlit dashboard on :8501 (PLAN §11)
+	$(RUN) streamlit run dashboard/app.py --server.port 8501 --server.headless true

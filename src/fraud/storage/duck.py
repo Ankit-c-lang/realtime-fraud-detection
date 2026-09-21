@@ -71,6 +71,22 @@ def has_scored_data(root: Path | None = None) -> bool:
     return directory.is_dir() and any(directory.glob("*/*.parquet"))
 
 
+def define_scored_view(connection: duckdb.DuckDBPyConnection, root: Path | None = None) -> bool:
+    """(Re)define the ``scored`` view; True when it reads real files.
+
+    Separate from ``connect`` because a long-lived connection — the dashboard caches one
+    for the whole session — is created before the scorer has written anything. The view
+    it gets then is the empty placeholder, and a view is defined once: without a way to
+    redefine it, every panel would show zeros for the rest of the replay and look like a
+    broken scorer rather than an empty directory.
+    """
+    if has_scored_data(root):
+        connection.execute(_SCORED_SQL.format(view=SCORED_VIEW, glob=scored_glob(root)))
+        return True
+    connection.execute(_EMPTY_SQL.format(view=SCORED_VIEW))
+    return False
+
+
 def connect(root: Path | None = None) -> duckdb.DuckDBPyConnection:
     """An in-memory connection with the ``scored`` view defined (PLAN §9.4).
 
@@ -78,9 +94,6 @@ def connect(root: Path | None = None) -> duckdb.DuckDBPyConnection:
     there is no file and no lock to contend for.
     """
     connection = duckdb.connect(database=":memory:")
-    if has_scored_data(root):
-        connection.execute(_SCORED_SQL.format(view=SCORED_VIEW, glob=scored_glob(root)))
-    else:
+    if not define_scored_view(connection, root):
         logger.info("no scored parquet yet; %s is an empty view", SCORED_VIEW)
-        connection.execute(_EMPTY_SQL.format(view=SCORED_VIEW))
     return connection
